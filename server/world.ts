@@ -2,7 +2,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import type { Server as HTTPServer, IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { SPAWN, wrapAngle } from '../shared/world.js';
-import { advanceMotion, groundHeight } from '../shared/physics.js';
+import { PhysicsRuntime, groundHeight } from '../shared/physics.js';
 import type { ClientInput, ClientMessage, PlayerState, ServerMessage } from '../shared/protocol.js';
 import { userFromRequest, type User } from './auth.js';
 
@@ -23,15 +23,15 @@ export function validInput(v: unknown): v is ClientInput {
 const send = (ws: WebSocket, msg: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 };
-function integrate(a: Actor, dt: number) {
+function integrate(a: Actor, dt: number, physics: PhysicsRuntime) {
   const m = a.input;
   const motion = { x:a.state.x, y:a.state.y, z:a.state.z, vy:a.vy, grounded:a.grounded, jumpHeld:a.jumpHeld };
-  advanceMotion(motion,m,dt);
+  physics.move(a.state.id,motion,m,dt);
   Object.assign(a.state,{x:motion.x,y:motion.y,z:motion.z});
   a.state.yaw=wrapAngle(m.yaw);
   a.vy=motion.vy;a.grounded=motion.grounded;a.jumpHeld=motion.jumpHeld;
 }
-export function attachMultiplayer(server: HTTPServer): WebSocketServer {
+export function attachMultiplayer(server: HTTPServer, physics: PhysicsRuntime): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8192, perMessageDeflate: false });
   server.on('upgrade', (req: IncomingMessage, socket, head) => {
     const user = userFromRequest(req);
@@ -60,13 +60,14 @@ export function attachMultiplayer(server: HTTPServer): WebSocketServer {
         send(socket, { type: 'pong', sent: msg.sent });
       } else socket.close(1003, 'invalid payload');
     });
-    socket.on('close', () => actors.delete(id));
-    socket.on('error', () => actors.delete(id));
+    socket.on('close', () => {actors.delete(id);physics.removeActor(id);});
+    socket.on('error', () => {actors.delete(id);physics.removeActor(id);});
   });
   let tick = 0;
   const timer = setInterval(() => {
     tick++;
-    for (const actor of actors.values()) integrate(actor, TICK_MS / 1000);
+    physics.updateScenery([...actors.values()].map(a=>a.state));
+    for (const actor of actors.values()) integrate(actor, TICK_MS / 1000, physics);
     if (tick % 2 === 0) for (const actor of actors.values()) {
       const a = actor.state;
       const players = [...actors.values()].filter(b => (b.state.x - a.x) ** 2 + (b.state.z - a.z) ** 2 < MAX_VISIBLE_DISTANCE_SQ).map(b => b.state);

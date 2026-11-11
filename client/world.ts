@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { clampWorld, hash2, SEA_LEVEL, SPAWN, terrainHeight } from '../shared/world';
 import type { PlayerState } from '../shared/protocol';
 import { WorldStreamer } from './streamer';
+import { PORT_SHAPES } from '../shared/harbor';
 
 const CHUNK = 56;
 const RADIUS = 5;
@@ -137,55 +139,48 @@ export class GameWorld {
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene,this.camera));
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .27, .55, .84));
+    this.composer.addPass(new SMAAPass());
     this.composer.addPass(new OutputPass());
     window.addEventListener('resize', () => this.resize());
   }
   private makeHarbor() {
-    const world = new THREE.Group();
-    this.scene.add(world);
-    const steel = new THREE.MeshStandardMaterial({ color:'#53656b', metalness:.6, roughness:.43 });
-    const dark = new THREE.MeshStandardMaterial({ color:'#23313b', metalness:.4, roughness:.5 });
-    const orange = new THREE.MeshStandardMaterial({ color:'#d39b67', metalness:.35, roughness:.42, emissive:'#422211', emissiveIntensity:.15 });
-    const gold = new THREE.MeshStandardMaterial({ color:'#ffd697', emissive:'#ff9b43', emissiveIntensity:2.4 });
-    const walkway = new THREE.MeshStandardMaterial({ color:'#1d3439', roughness:.24, metalness:.38 });
-    const cube = new THREE.BoxGeometry(1,1,1);
-    const box = (mat:THREE.Material,x:number,y:number,z:number,w:number,h:number,d:number,shadow=true):THREE.Mesh => {
-      const mesh = new THREE.Mesh(cube,mat); mesh.position.set(x,y,z); mesh.scale.set(w,h,d);
-      mesh.castShadow = shadow; mesh.receiveShadow = true; world.add(mesh); return mesh;
+    const scene=new THREE.Group();this.scene.add(scene);
+    const mat:Record<string,THREE.MeshStandardMaterial>={
+      walkway:new THREE.MeshStandardMaterial({color:'#1d3439',roughness:.24,metalness:.38}),
+      steel:new THREE.MeshStandardMaterial({color:'#53656b',metalness:.6,roughness:.43}),
+      dark:new THREE.MeshStandardMaterial({color:'#23313b',metalness:.4,roughness:.5}),
+      orange:new THREE.MeshStandardMaterial({color:'#d39b67',metalness:.35,roughness:.42,emissive:'#422211',emissiveIntensity:.15}),
+      gold:new THREE.MeshStandardMaterial({color:'#ffd697',emissive:'#ff9b43',emissiveIntensity:2.4})
     };
-    // Landmark harbor; all positions tied to common terrain platform near spawn.
-    box(walkway,28,3.38,35,86,.28,32,false);
-    box(steel,27,2.5,18,85,4,.8);
-    box(steel,27,2.5,52,85,4,.8);
-    box(dark,-14,7.2,17,18,7,14);
-    box(orange,-14,11.2,17,17,1.4,14);
-    for(let i=0;i<8;i++) {
-      const x=-5+i*9.2, z=23+(i%3)*8.6;
-      const m = i%3===1 ? orange : i%2 ? dark : steel;
-      box(m,x,4.75,z,7.3,2.5,3);
-      box(dark,x,3.51,z,7.35,.08,3.1);
-      if(i%3===0) box(steel,x,7.3,z,7.3,2.5,3);
+    const cube=new THREE.BoxGeometry(1,1,1);
+    for(const shape of PORT_SHAPES){
+      const mesh=new THREE.Mesh(cube,mat[shape.material]);
+      mesh.position.set(shape.x,shape.y,shape.z);mesh.scale.set(shape.w,shape.h,shape.d);
+      mesh.castShadow=shape.material!=='walkway'&&shape.material!=='gold';
+      mesh.receiveShadow=true;scene.add(mesh);
     }
-    // Crane geometry.
-    for(const x of [62,-42]) {
-      for (const dz of [-7,7]) box(steel,x,16,34+dz,1.2,26,1.2);
-      box(orange,x,29.3,34,3,1.2,17);
-      box(orange,x+9,31.0,34,24,1.1,1.7);
-      box(dark,x+17,20.5,34,.18,20,.18);
-      box(dark,x+17,10.5,34,3.1,.6,3.1);
+    const lamp=new THREE.PointLight('#ffb96c',35,70,2);
+    lamp.position.set(92,25.5,4);scene.add(lamp);
+    const lens=new THREE.Mesh(new THREE.SphereGeometry(1.35,16,12),mat.gold);
+    lens.position.copy(lamp.position);scene.add(lens);
+    for(let i=0;i<10;i++){
+      const point=new THREE.PointLight('#ffba68',1.4,22);
+      point.position.set(-29+i*10,12.5,52);scene.add(point);
     }
-    // Beacon near harbor.
-    const beacon = new THREE.Mesh(new THREE.CylinderGeometry(2,3.4,24,12),steel);
-    beacon.position.set(92,14,4); beacon.castShadow=true; world.add(beacon);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(3.5,3.5,1,12),dark);cap.position.set(92,27,4);world.add(cap);
-    const lamp = new THREE.PointLight('#ffb96c',35,70,2); lamp.position.set(92,25.5,4);world.add(lamp);
-    const lens = new THREE.Mesh(new THREE.SphereGeometry(1.35,16,12),gold);lens.position.copy(lamp.position);world.add(lens);
-    for(let i=0;i<10;i++) {
-      const x=-29+i*10;
-      box(dark,x,8.3,52,.18,9,.18);
-      box(gold,x,12.5,52,1.2,.3,.3,false);
-      const point = new THREE.PointLight('#ffba68',1.6,22);point.position.set(x,12.5,52);world.add(point);
+  }
+  hasInteractionTarget(x:number,y:number,z:number):boolean {
+    // Reticle is contextual: other players are the only nearby potential target in v0.1.
+    this.camera.updateMatrixWorld();
+    const direction=new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+    const target=new THREE.Vector3();
+    for(const avatar of this.avatars.values()){
+      target.copy(avatar.mesh.position).add(new THREE.Vector3(0,1.55,0));
+      const delta=target.sub(this.camera.position);
+      const d=delta.length();
+      if(d<3.8 && d>0.2 && delta.normalize().dot(direction)>.9)return true;
     }
+    return false;
   }
   syncPlayers(players:PlayerState[], selfId:string){
     const seen=new Set<string>();

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { BUILDINGS, nearbyObstacles, sceneryForChunk } from '../shared/city.js';
+import { BUILDINGS, sceneryForChunk } from '../shared/city.js';
+import { PORT_SHAPES } from '../shared/harbor.js';
 import { WORLD_LIMIT, CHUNK_SIZE, terrainHeight, terrainBiome } from '../shared/world.js';
-import { blockedAt, advanceMotion, groundHeight, EYE_HEIGHT } from '../shared/physics.js';
+import { PhysicsRuntime, groundHeight, EYE_HEIGHT } from '../shared/physics.js';
 import { decodeTile } from '../client/terrain-binary.js';
 import { withinWorld } from '../client/terrain-data.js';
 
@@ -51,25 +52,45 @@ test('baked terrain bytes decode at every LOD and agree with server-side height'
   });
 });
 
-test('shared city collision blocks walls but allows public streets',()=>{
-  const b=BUILDINGS[0];
-  assert.ok(blockedAt(b.x,b.z,groundHeight(b.x,b.z)));
-  const x=b.x+b.w/2+3;
-  const z=b.z;
-  assert.equal(nearbyObstacles(b.x,b.z).length>0,true);
-  assert.equal(blockedAt(x,z,groundHeight(x,z)),false);
-  const state={x:x,y:groundHeight(x,z)+EYE_HEIGHT,z,vy:0,grounded:true,jumpHeld:false};
-  const start={...state};
-  const input={type:'input' as const,seq:1,forward:0,strafe:-1,yaw:0,sprint:false,jump:false};
-  for(let i=0;i<40;i++)advanceMotion(state,input,.05);
-  assert.ok(state.x>=b.x+b.w/2+.32,'cannot enter a building facade');
-  assert.ok(state.x<start.x,'can approach the building');
+test('Rapier colliders mirror ALL port meshes including railings and containers', async()=>{
+  const physics=await PhysicsRuntime.create();
+  const obstacles=PORT_SHAPES.filter(s=>s.solid);
+  assert.ok(obstacles.length>=50);
+  assert.equal(new Set(PORT_SHAPES.map(o=>o.id)).size,PORT_SHAPES.length);
+  assert.equal(PORT_SHAPES.filter(s=>/^container-\d+$/.test(s.id) && s.solid).length,8);
+  assert.ok(PORT_SHAPES.some(s=>s.id==='quay-guard-south' && s.solid));
+  const motion=(x:number,z:number)=>({x,z,y:groundHeight(x,z)+EYE_HEIGHT,vy:0,grounded:true,jumpHeld:false});
+  const input={type:'input' as const,seq:1,forward:0,strafe:1,yaw:0,sprint:true,jump:false};
+  const box=motion(35,40.2);
+  physics.updateScenery([box]);
+  for(let i=0;i<80;i++)physics.move('box',box,input,.05);
+  // Container 5 is centred at (41, 40.2), width 7.3; the capsule must stay outside its west wall.
+  assert.ok(box.x<37.01 && box.x>36.5,'continuous sweep must stop outside the container wall');
+  const guard=motion(10,57);
+  physics.updateScenery([guard]);
+  for(let i=0;i<80;i++)physics.move('guard',guard,{...input,forward:1,strafe:0},.05);
+  assert.ok(guard.z>52.74 && guard.z<53,'quay guardrail cannot be crossed');
+  const slide=motion(18,44);
+  physics.updateScenery([slide]);
+  for(let i=0;i<35;i++)physics.move('slide',slide,{...input,forward:1,strafe:1},.05);
+  assert.ok(Math.hypot(slide.x-18,slide.z-44)>2,'characters can slide along obstacles');
+  physics.removeActor('box');physics.removeActor('guard');physics.removeActor('slide');
+  physics.free();
 });
 
-test('world boundary cannot be crossed even with repeated sprint inputs',()=>{
-  const state={x:WORLD_LIMIT-.2,y:groundHeight(WORLD_LIMIT-.2,120)+EYE_HEIGHT,
+test('Rapier blocks city buildings and applies hard world boundaries',async()=>{
+  const physics=await PhysicsRuntime.create();
+  const b=BUILDINGS[0];
+  const x=b.x+b.w/2+3,z=b.z;
+  const state={x,y:groundHeight(x,z)+EYE_HEIGHT,z,vy:0,grounded:true,jumpHeld:false};
+  const m={type:'input' as const,seq:1,forward:0,strafe:-1,yaw:0,sprint:false,jump:false};
+  physics.updateScenery([state]);
+  for(let i=0;i<60;i++)physics.move('building',state,m,.05);
+  assert.ok(state.x>b.x+b.w/2+0.3,'player capsule cannot enter building walls');
+  const edge={x:WORLD_LIMIT-.2,y:groundHeight(WORLD_LIMIT-.2,120)+EYE_HEIGHT,
     z:120,vy:0,grounded:true,jumpHeld:false};
-  const input={type:'input' as const,seq:1,forward:0,strafe:1,yaw:0,sprint:true,jump:false};
-  for(let i=0;i<150;i++)advanceMotion(state,input,.05);
-  assert.equal(state.x,WORLD_LIMIT);
+  physics.updateScenery([edge]);
+  for(let i=0;i<150;i++)physics.move('edge',edge,{...m,strafe:1,sprint:true},.05);
+  assert.equal(edge.x,WORLD_LIMIT);
+  physics.free();
 });

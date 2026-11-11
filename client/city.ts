@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { BUILDINGS, CITY_GRID, buildingsForChunk, type Building } from '../shared/city';
 import { CHUNK_SIZE, CITY_BASE, hash2 } from '../shared/world';
+import { attachCityPrefab, cityPrefabVariant } from './city-prefabs';
+import { cityPropsForChunk } from '../shared/city-furniture';
 
 const cube = new THREE.BoxGeometry(1,1,1);
 const surface = (color:string,roughness=.8,metalness=.05,emissive?:string) =>
@@ -100,17 +102,17 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
   const x0=Math.max(-336,x-half),x1=Math.min(336,x+half);
   const z0=Math.max(-565,z-half),z1=Math.min(-48,z+half);
   if(x1<=x0||z1<=z0)return;
-  batch.add('sidewalk',(x0+x1)/2,CITY_BASE+.065,(z0+z1)/2,x1-x0,.13,z1-z0);
+  batch.add('sidewalk',(x0+x1)/2,CITY_BASE+.025,(z0+z1)/2,x1-x0,.12,z1-z0);
   const vx=Math.ceil((x0-7)/CITY_GRID),ux=Math.floor((x1+7)/CITY_GRID);
   for(let n=vx;n<=ux;n++){
     const gx=n*CITY_GRID;
     const left=Math.max(x0,gx-6.8),right=Math.min(x1,gx+6.8);
-    if(right>left)batch.add('road',(left+right)/2,CITY_BASE+.085,(z0+z1)/2,right-left,.085,z1-z0);
+    if(right>left)batch.add('road',(left+right)/2,CITY_BASE+.14,(z0+z1)/2,right-left,.08,z1-z0);
     if(lod===0 && gx>=x0&&gx<=x1){
       for(let k=Math.ceil(z0/13);k<Math.floor(z1/13);k++){
         const mz=k*13+3.2;
         if(mz+3<z0||mz-3>z1||Math.abs((mz/CITY_GRID)-Math.round(mz/CITY_GRID))<.25)continue;
-        batch.add('paint',gx,CITY_BASE+.137,mz,.12,.008,3.2);
+        batch.add('paint',gx,CITY_BASE+.197,mz,.12,.008,3.2);
       }
     }
   }
@@ -118,12 +120,12 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
   for(let n=vz;n<=uz;n++){
     const gz=n*CITY_GRID;
     const low=Math.max(z0,gz-6.8),high=Math.min(z1,gz+6.8);
-    if(high>low)batch.add('road',(x0+x1)/2,CITY_BASE+.085,(low+high)/2,x1-x0,.09,high-low);
+    if(high>low)batch.add('road',(x0+x1)/2,CITY_BASE+.14,(low+high)/2,x1-x0,.08,high-low);
     if(lod===0 && gz>=z0&&gz<=z1){
       for(let k=Math.ceil(x0/13);k<Math.floor(x1/13);k++){
         const mx=k*13+3.3;
         if(mx+3>x1||mx-3<x0||Math.abs((mx/CITY_GRID)-Math.round(mx/CITY_GRID))<.25)continue;
-        batch.add('paint',mx,CITY_BASE+.137,gz,3.3,.009,.12);
+        batch.add('paint',mx,CITY_BASE+.197,gz,3.3,.009,.12);
       }
     }
   }
@@ -133,8 +135,8 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
     const rx=ix*CITY_GRID,rz=iz*CITY_GRID;
     if(rx<x0+8||rx>x1-8||rz<z0+8||rz>z1-8)continue;
     for(let j=-4;j<=4;j++) {
-      batch.add('paint',rx+j*1.65,CITY_BASE+.137,rz+9,1,.01,3.1);
-      batch.add('paint',rx+j*1.65,CITY_BASE+.137,rz-9,1,.01,3.1);
+      batch.add('paint',rx+j*1.65,CITY_BASE+.197,rz+9,1,.01,3.1);
+      batch.add('paint',rx+j*1.65,CITY_BASE+.197,rz-9,1,.01,3.1);
     }
     for(const dx of [-9,9])for(const dz of [-9,9]){
       batch.add('metal',rx+dx,CITY_BASE+.75,rz+dz,.15,1.35,.15);
@@ -143,43 +145,22 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
   }
 }
 function furniture(batch:BoxBatch,cx:number,cz:number){
-  const x0=cx*CHUNK_SIZE-CHUNK_SIZE/2,x1=x0+CHUNK_SIZE;
-  const z0=cz*CHUNK_SIZE-CHUNK_SIZE/2,z1=z0+CHUNK_SIZE;
-  for(let ix=-6;ix<=5;ix++)for(let iz=-10;iz<=-2;iz++){
-    const x=(ix+.5)*CITY_GRID,z=(iz+.5)*CITY_GRID;
-    if(x<x0||x>=x1||z<z0||z>=z1)continue;
-    const lot=BUILDINGS.find(b=>b.id===ix+':'+iz);
-    if(!lot){
-      batch.add('garden',x,CITY_BASE+.09,z,42,.19,42);
-      for(let t=0;t<7;t++){
-        const tx=x+(hash2(ix*61+t,iz*13)-.5)*30;
-        const tz=z+(hash2(ix*21+t,iz*71)-.5)*30;
-        batch.add('shrub',tx,CITY_BASE+1,tz,2.5,2,2.5);
-        batch.add('metal',tx,CITY_BASE+2.9,tz,.3,3,.3);
-      }
-    }
-    // Streetlamp poles, illuminated heads, bins, benches and bollards.
-    for(const side of [-1,1]){
-      const lx=x+side*24,lz=z-22;
-      batch.add('metal',lx,CITY_BASE+4.3,lz,.18,8.6,.18);
-      batch.add('metal',lx+side*1.15,CITY_BASE+8.6,lz,2.5,.15,.15);
-      batch.add('warm',lx+side*2.2,CITY_BASE+8.52,lz,.65,.16,.5);
-      if((ix+iz)%2===0){
-        batch.add('metal',x+side*23,CITY_BASE+.5,z+12,.7,1,.7);
-        batch.add('copper',x+side*23,CITY_BASE+.7,z+12,.75,.12,.75);
-      }
-    }
-  }
+  for(const prop of cityPropsForChunk(cx,cz))
+    batch.add(prop.mat,prop.x,prop.y,prop.z,prop.w,prop.h,prop.d);
 }
 export function makeCityChunk(cx:number,cz:number,lod:number):THREE.Group{
   const group=new THREE.Group();
   const batch=new BoxBatch();
   streets(batch,cx,cz,lod);
   for(const b of buildingsForChunk(cx,cz)){
-    batch.add('sidewalk',b.x,CITY_BASE+.13,b.z,CITY_GRID-14,.26,CITY_GRID-14);
-    facade(batch,b,lod);
+    batch.add('sidewalk',b.x,CITY_BASE+.09,b.z,CITY_GRID-14,.12,CITY_GRID-14);
+    if(!cityPrefabVariant(b,lod))facade(batch,b,lod);
   }
   if(lod===0)furniture(batch,cx,cz);
   batch.finish(group);
+  for(const building of buildingsForChunk(cx,cz)){
+    const variant=cityPrefabVariant(building,lod);
+    if(variant)attachCityPrefab(group,building,variant);
+  }
   return group;
 }

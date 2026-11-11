@@ -45,3 +45,22 @@ To customize city footprints, edit the static layout and rebake a new world vers
 ## Limitations
 
 This is a pre-generated, **bounded experimental world**, not a photogrammetry AAA city. Assets use original procedural meshes/materials, not imported commercial art. Current collision is simplified (AABBs for buildings/port props and cylinder-like approximations for trees/rocks). Rails/roads and cars remain future features. Natural boundaries, navmesh, climb animations, swimming, collision on all street furniture and seamless server-scaled multiplayer are not complete.
+
+## CC0 prebuilt urban assets (interim upgrade)
+
+The first commercial-quality authored city facades use Quaternius *Downtown City MegaKit* (May 2026, CC0), with three glTF buildings optimized to WebP by anshaneja5/skyline-run and verified by pinned SHA256. The default source checkout does not store these binary models; execute `npm run assets:fetch` and then `npm run build`. This downloads only 5.3 MiB in total and includes it in the deployed release, with no runtime dependency on GitHub. Building geometry is scaled to its authoritative physical AABB.
+
+Source: https://quaternius.com/packs/downtowncitymegakit.html ; optimized package: https://github.com/anshaneja5/skyline-run (CC0 models).
+
+This first replacement does **not** constitute a complete high-resolution city map. Two credible full-city open-data baselines have been identified for a later, collision-aware map transition:
+- Helsinki official photogrammetric 3D Mesh and CityGML urban model (CC BY 4.0, with attribution): https://www.hel.fi/en/decision-making/information-on-helsinki/maps-and-geospatial-data/helsinki-3d
+- Japan MLIT Project PLATEAU, with pretrained web-ready ~1 km glTF city tiles and collision meshes from https://huggingface.co/datasets/codepawl/plateau-city-glb (CC BY 4.0, source credit and modification notice required).
+
+They must be imported together with their road/height and collision meshes before replacing the authoritative world. Rendering their geometry without matching physics would recreate the container/guardrail bug.
+
+## Physics and visual parity (0.2)
+
+- `shared/harbor.ts` defines every port crate, guardrail, crane structure, pole and gantry; the same data creates Three.js meshes and Rapier colliders. Walkway flooring is deliberately nonsolid because ground height handles it.
+- `shared/city-furniture.ts` defines lampposts, parking bins, park items and decorations; solid shapes become Rapier boxes. City buildings are static cuboids using the same layout footprints.
+- `shared/physics.ts` contains the authoritative kinematic capsule controller used for both the 20Hz server and client prediction. The controller sweeps and slides rather than rejecting any movement toward an obstacle. Vegetation colliders are loaded only near active actors. The terrain is still height-based; it will be converted to signed local collision tiles when real-city assets replace the synthetic world.
+- An SMAA post-process pass runs before output mapping to remove jagged edges while retaining HDR bloom. Road markings are raised above asphalt, and asphalt above sidewalk to eliminate overlapping depth surfaces. The reticle is invisible when no other player is nearby and centered in the view.

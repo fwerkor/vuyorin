@@ -1,7 +1,7 @@
 import './style.css';
 import { GameWorld } from './world';
 import { SPAWN, wrapAngle } from '../shared/world';
-import { advanceMotion, groundHeight } from '../shared/physics';
+import { PhysicsRuntime, groundHeight } from '../shared/physics';
 import type { ClientInput, PlayerState, ServerMessage } from '../shared/protocol';
 
 const canvas=document.getElementById('world') as HTMLCanvasElement;
@@ -16,6 +16,9 @@ const heading=document.getElementById('heading')!;
 const coords=document.getElementById('coords')!;
 const hint=document.getElementById('hint')!;
 const toast=document.getElementById('toast')!;
+const cross=document.getElementById('center-cross')!;
+let physics:PhysicsRuntime | null=null;
+let physicsLoading:Promise<PhysicsRuntime>|null=null;
 let loggedIn=false, started=false, selfId='', socket:WebSocket|null=null, seq=0;
 let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=groundHeight(x,z)+1.7, vy=0, grounded=true, jumpHeld=false;
 let lastFrame=performance.now(), lastInput=0;
@@ -54,8 +57,18 @@ function input():ClientInput {
     strafe:Number(held.has('KeyD')||held.has('ArrowRight'))-Number(held.has('KeyA')||held.has('ArrowLeft')),
     yaw, sprint:held.has('ShiftLeft')||held.has('ShiftRight'),jump:held.has('Space')};
 }
-function start(){
+async function start(){
   if(!loggedIn)return;
+  if(started)return;
+  introState.textContent='正在启动共享物理世界...';
+  try {
+    physics=await (physicsLoading??=PhysicsRuntime.create());
+  } catch(error) {
+    physicsLoading=null;
+    console.error('Physics init failed',error);
+    introState.textContent='物理引擎启动失败，请重试。';
+    showToast('物理引擎初始化失败，请刷新');return;
+  }
   started=true;intro.classList.add('hidden');hint.classList.add('visible');
   connect();canvas.requestPointerLock?.();
 }
@@ -89,9 +102,11 @@ function frame(t:number){
   if(started){
     const m=input();
     const motion={x,y,z,vy,grounded,jumpHeld};
-    advanceMotion(motion,m,dt);
+    physics!.updateScenery([{x,z}]);
+    physics!.move('local',motion,m,dt);
     ({x,y,z,vy,grounded,jumpHeld}=motion);
     world.setView(x,y,z,yaw,pitch);
+    cross.classList.toggle('visible',world.hasInteractionTarget(x,y,z));
     heading.textContent=`${['N','NE','E','SE','S','SW','W','NW'][Math.round((((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI))/(Math.PI/4))%8]} ${String(Math.round(((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI)*180/Math.PI)).padStart(3,'0')}°`;
     coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
     if(socket?.readyState===WebSocket.OPEN && t-lastInput>50){socket.send(JSON.stringify(m));lastInput=t;}

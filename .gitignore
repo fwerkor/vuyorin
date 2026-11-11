@@ -11,3 +11,7 @@ coverage/
 # Immutable compiled world tiles (generate via npm run bake:world)
 client/public/world/v1/*.bin
 client/public/world/v1/manifest.json
+
+# Reproducible CC0 model assets, pinned by scripts/fetch-city-assets.ts
+client/public/assets/cc0/*.glb
+client/public/assets/cc0/*.tmp

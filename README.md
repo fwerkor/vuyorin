@@ -11,6 +11,7 @@ Requirements: Node.js 20+ (Node 18 works for the currently pinned Vite 5 toolcha
 ```sh
 npm ci
 npm run bake:world
+npm run assets:fetch
 cp .env.example .env
 # Set PUBLIC_BASE_URL, OIDC_ISSUER, OIDC_CLIENT_ID in .env
 npm run dev
@@ -30,3 +31,9 @@ See [architecture](docs/architecture.md), [world streaming](docs/world-streaming
 
 ## License
 MIT for original code in this repository. **The external 几猫 HTML and its assets are not redistributed**, because no reuse license has been confirmed.
+
+### 0.2 runtime and assets
+
+The world uses the Rapier WASM kinematic capsule controller on both the browser and authoritative server. The harbor layout, city buildings and street props share their visual and physical shape descriptions, while near-field trees/rocks have streaming physics. The renderer includes SMAA after bloom.
+
+Three authored CC0 urban GLB prefabs are fetched by `npm run assets:fetch` at build time, SHA256 checked and served locally in production. Original author: Quaternius, *Downtown City MegaKit*. The 3D city footprint remains temporary; see `docs/world-streaming.md` for shortlisted licensed full-city maps and the planned collision-safe migration.

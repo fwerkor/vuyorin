@@ -5,7 +5,7 @@ One URL opens a real-time multiplayer, GPU-rendered world. Native browser client
 
 ## Boundaries
 - **Browser:** Three.js/WebGL 2; offline pre-baked terrain and placed vegetation, three-ring dynamic LOD stream via HTTPS; water and weather shaders; instanced objects; responsive UI; local prediction and interpolation.
-- **Server:** single Node.js/TypeScript HTTP+WebSocket process. HTTP serves immutable Vite output, API and OAuth endpoints; WS upgrade validates session and Origin. Server validates and integrates movement and sends proximity snapshots.
+- **Server:** single Node.js/TypeScript HTTP+WebSocket process. HTTP serves immutable Vite output, API and OAuth endpoints; WS upgrade validates session and Origin. Server validates and integrates Rapier capsule-based movement and sends proximity snapshots. Physics collider layouts are shared with the browser for prediction.
 - **Authentication:** Authorization Code + PKCE (S256), random state and nonce; verifies RS256 ID token with provider JWKS (issuer/audience/nonce); opaque, HttpOnly, Secure, SameSite=Lax session cookie; WS shares same session, no query tokens. Sessions are in-memory until durable storage is implemented.
 - **World:** pre-baked versioned World v1, 3.936 km × 3.936 km hard boundary, static city footprints and deterministic authoritative collision; spawn at the harbor, dynamic sky and ocean. World state is server-authoritative. 20 Hz simulation, 10 Hz snapshots; limited interest range.
 - **Deployment:** Incus LXC `vuyorin` on fwerkor85; service listens on 0.0.0.0:3000 inside container; NPM forwards `vuyorin.fwerkor.com` with WebSocket upgrade and wildcard certificate; explicit callback URI `https://vuyorin.fwerkor.com/auth/callback` registered with Auctor.

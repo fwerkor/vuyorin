@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleAuth } from './auth.js';
 import { attachMultiplayer } from './world.js';
+import { PhysicsRuntime } from '../shared/physics.js';
 
 const port = Number(process.env.PORT || 3000);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
@@ -19,7 +20,7 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', process.env.PUBLIC_BASE_URL || 'http://localhost:3000');
     if (url.pathname === '/api/health') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, service: 'vuyorin', version: '0.1.0' })); return;
+      res.end(JSON.stringify({ ok: true, service: 'vuyorin', version: '0.2.0' })); return;
     }
     if (await handleAuth(req, res, url)) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') { fail(res, 404); return; }
@@ -37,7 +38,8 @@ const server = createServer(async (req, res) => {
     if (req.method === 'HEAD') res.end(); else res.end(content);
   } catch (error) { console.error('HTTP error:', error); fail(res, 500); }
 });
-const wss = attachMultiplayer(server);
+const physics=await PhysicsRuntime.create();
+const wss = attachMultiplayer(server,physics);
 server.listen(port, '0.0.0.0', () => console.log(`VUYORIN listening on :${port}`));
 
 let stopping = false;

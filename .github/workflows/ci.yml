@@ -23,4 +23,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run bake:world
       - run: npm test
+      - run: npm run assets:fetch
       - run: npm run build
