@@ -1,5 +1,5 @@
 import type { ClientInput } from './protocol.js';
-import { clampWorld, SEA_LEVEL, terrainHeight, wrapAngle } from './world.js';
+import { clampWorld, SEA_LEVEL, terrainHeight, wrapAngle, isCity, CITY_BASE } from './world.js';
 import { nearbyObstacles, sceneryForChunk } from './city.js';
 import { CHUNK_SIZE } from './world.js';
 
@@ -10,7 +10,7 @@ export interface MotionState {
 }
 export function groundHeight(x: number, z: number): number {
   // Shallow water can be waded through. Deeper-water swimming is a separate system.
-  return Math.max(terrainHeight(x,z), SEA_LEVEL - 1.35);
+  return isCity(x,z) ? CITY_BASE + .125 : Math.max(terrainHeight(x,z), SEA_LEVEL - 1.35);
 }
 export function blockedAt(x: number, z: number, feetY: number): boolean {
   if (nearbyObstacles(x,z,2).some(o =>

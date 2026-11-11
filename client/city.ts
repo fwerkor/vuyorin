@@ -105,12 +105,12 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
   for(let n=vx;n<=ux;n++){
     const gx=n*CITY_GRID;
     const left=Math.max(x0,gx-6.8),right=Math.min(x1,gx+6.8);
-    if(right>left)batch.add('road',(left+right)/2,CITY_BASE+.17,(z0+z1)/2,right-left,.085,z1-z0);
+    if(right>left)batch.add('road',(left+right)/2,CITY_BASE+.085,(z0+z1)/2,right-left,.085,z1-z0);
     if(lod===0 && gx>=x0&&gx<=x1){
       for(let k=Math.ceil(z0/13);k<Math.floor(z1/13);k++){
         const mz=k*13+3.2;
         if(mz+3<z0||mz-3>z1||Math.abs((mz/CITY_GRID)-Math.round(mz/CITY_GRID))<.25)continue;
-        batch.add('paint',gx,CITY_BASE+.22,mz,.12,.008,3.2);
+        batch.add('paint',gx,CITY_BASE+.137,mz,.12,.008,3.2);
       }
     }
   }
@@ -118,12 +118,12 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
   for(let n=vz;n<=uz;n++){
     const gz=n*CITY_GRID;
     const low=Math.max(z0,gz-6.8),high=Math.min(z1,gz+6.8);
-    if(high>low)batch.add('road',(x0+x1)/2,CITY_BASE+.18,(low+high)/2,x1-x0,.09,high-low);
+    if(high>low)batch.add('road',(x0+x1)/2,CITY_BASE+.085,(low+high)/2,x1-x0,.09,high-low);
     if(lod===0 && gz>=z0&&gz<=z1){
       for(let k=Math.ceil(x0/13);k<Math.floor(x1/13);k++){
         const mx=k*13+3.3;
         if(mx+3>x1||mx-3<x0||Math.abs((mx/CITY_GRID)-Math.round(mx/CITY_GRID))<.25)continue;
-        batch.add('paint',mx,CITY_BASE+.24,gz,3.3,.009,.12);
+        batch.add('paint',mx,CITY_BASE+.137,gz,3.3,.009,.12);
       }
     }
   }
@@ -133,8 +133,8 @@ function streets(batch:BoxBatch,cx:number,cz:number,lod:number){
     const rx=ix*CITY_GRID,rz=iz*CITY_GRID;
     if(rx<x0+8||rx>x1-8||rz<z0+8||rz>z1-8)continue;
     for(let j=-4;j<=4;j++) {
-      batch.add('paint',rx+j*1.65,CITY_BASE+.25,rz+9,1,.01,3.1);
-      batch.add('paint',rx+j*1.65,CITY_BASE+.25,rz-9,1,.01,3.1);
+      batch.add('paint',rx+j*1.65,CITY_BASE+.137,rz+9,1,.01,3.1);
+      batch.add('paint',rx+j*1.65,CITY_BASE+.137,rz-9,1,.01,3.1);
     }
     for(const dx of [-9,9])for(const dz of [-9,9]){
       batch.add('metal',rx+dx,CITY_BASE+.75,rz+dz,.15,1.35,.15);

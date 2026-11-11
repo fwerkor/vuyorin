@@ -96,9 +96,11 @@ function frame(t:number){
     coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
     if(socket?.readyState===WebSocket.OPEN && t-lastInput>50){socket.send(JSON.stringify(m));lastInput=t;}
   } else {
-    const x0=SPAWN.x+Math.sin(t*.00019)*11,z0=SPAWN.z+Math.cos(t*.00019)*11;
-    const y0=groundHeight(x0,z0)+5.6;
-    world.setView(x0,y0,z0,-.5+Math.sin(t*.00014)*.3,-.24);
+    // Showcase the authored downtown streets while the player is on the title screen.
+    const orbit=t*.00010;
+    const x0=Math.sin(orbit)*2.8,z0=-23+Math.cos(orbit)*3.5;
+    const y0=groundHeight(x0,z0)+6.7;
+    world.setView(x0,y0,z0,Math.sin(orbit*.8)*.10,-.12);
   }
   world.render(dt);
   requestAnimationFrame(frame);
