@@ -37,7 +37,21 @@ const server = createServer(async (req, res) => {
     if (req.method === 'HEAD') res.end(); else res.end(content);
   } catch (error) { console.error('HTTP error:', error); fail(res, 500); }
 });
-attachMultiplayer(server);
+const wss = attachMultiplayer(server);
 server.listen(port, '0.0.0.0', () => console.log(`VUYORIN listening on :${port}`));
-const shutdown = () => server.close(() => process.exit(0));
+
+let stopping = false;
+const shutdown = () => {
+  if (stopping) return;
+  stopping = true;
+  // HTTP server.close() alone cannot end upgraded WebSocket connections.
+  for (const client of wss.clients) client.close(1001, 'Server restarting');
+  wss.close();
+  server.close(() => process.exit(0));
+  setTimeout(() => {
+    for (const client of wss.clients) client.terminate();
+    server.closeAllConnections();
+    process.exit(0);
+  }, 2500).unref();
+};
 process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);

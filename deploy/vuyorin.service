@@ -10,6 +10,7 @@ EnvironmentFile=/etc/vuyorin.env
 ExecStart=/usr/bin/node /opt/vuyorin/dist-server/server/index.js
 Restart=always
 RestartSec=3
+TimeoutStopSec=10
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=true
