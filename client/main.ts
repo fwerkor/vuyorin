@@ -1,5 +1,6 @@
 import './style.css';
 import { GameWorld } from './world';
+import { AvatarPreview } from './avatar-preview';
 import { SPAWN, wrapAngle } from '../shared/world';
 import { PhysicsRuntime, groundHeight } from '../shared/physics';
 import { DEFAULT_APPEARANCE, HEAD_STYLES, BODY_STYLES, PACK_STYLES, safeAppearance, type Appearance } from '../shared/appearance';
@@ -20,6 +21,7 @@ const hint=document.getElementById('hint')!;
 const toast=document.getElementById('toast')!;
 const cross=document.getElementById('center-cross')!;
 const wardrobe=document.getElementById('wardrobe')!;
+let avatarPreview:AvatarPreview|null=null;
 let physics:PhysicsRuntime | null=null;
 let physicsLoading:Promise<PhysicsRuntime>|null=null;
 let loggedIn=false, started=false, selfId='', socket:WebSocket|null=null, seq=0;
@@ -30,6 +32,12 @@ const held=new Set<string>();
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
 function showToast(text:string){toast.textContent=text;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),3000);}
 function renderWardrobe(){
+  if(!avatarPreview){
+    try{avatarPreview=new AvatarPreview(document.getElementById('wardrobeCanvas') as HTMLCanvasElement);
+      wardrobe.querySelector('.wardrobe-preview')!.classList.add('has-webgl');}
+    catch(error){console.warn('Wardrobe preview uses static fallback',error);}
+  }
+  avatarPreview?.setAppearance(appearance);
   const preview=wardrobe.querySelector('.preview-character') as HTMLElement;
   for(const [name,color] of Object.entries({head:HEAD_STYLES[appearance.head].color,body:BODY_STYLES[appearance.body].color,pack:PACK_STYLES[appearance.backpack].color,
     'head-trim':HEAD_STYLES[appearance.head].trim,'body-trim':BODY_STYLES[appearance.body].trim,'pack-trim':PACK_STYLES[appearance.backpack].trim})){
@@ -188,6 +196,7 @@ function frame(t:number){
     coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
     sendInput(t);
   } else {
+    avatarPreview?.render(t);
     // Showcase the authored downtown streets while the player is on the title screen.
     const orbit=t*.00010;
     const x0=Math.sin(orbit)*2.8,z0=-23+Math.cos(orbit)*3.5;
