@@ -167,16 +167,20 @@ export class PhysicsRuntime {
     const foot=s.y-EYE_HEIGHT;
     const origin={x:s.x,y:foot+CAPSULE_MIDDLE,z:s.z};
     actor.collider.setTranslation(origin);
-    // Rapier's continuous swept capsule takes precedence over all static obstacle shapes.
-    this.controller.computeColliderMovement(actor.collider,{x:dx,y:0,z:dz});
-    const sweep=this.controller.computedMovement();
-    const tx=clampWorld(s.x+sweep.x),tz=clampWorld(s.z+sweep.z);
-    // Terrain height is pre-baked, and the same immutable elevation function is authoritative.
-    const prev=groundHeight(s.x,s.z),next=groundHeight(tx,tz);
-    const grade=next-prev;
-    const horizontal=Math.hypot(sweep.x,sweep.z);
-    if(!s.grounded || grade<=.17+horizontal*.95){
-      s.x=tx;s.z=tz;
+    // Do not run a zero-length Rapier sweep: penetration recovery can introduce
+    // tiny horizontal displacements even after every movement key was released.
+    if (m.forward !== 0 || m.strafe !== 0) {
+      // Rapier's continuous swept capsule takes precedence over static obstacles.
+      this.controller.computeColliderMovement(actor.collider,{x:dx,y:0,z:dz});
+      const sweep=this.controller.computedMovement();
+      const tx=clampWorld(s.x+sweep.x),tz=clampWorld(s.z+sweep.z);
+      // Terrain height is pre-baked, shared by the server and client.
+      const prev=groundHeight(s.x,s.z),next=groundHeight(tx,tz);
+      const grade=next-prev;
+      const horizontal=Math.hypot(sweep.x,sweep.z);
+      if(!s.grounded || grade<=.17+horizontal*.95){
+        s.x=tx;s.z=tz;
+      }
     }
     if(m.jump&&!s.jumpHeld&&s.grounded){s.vy=6.4;s.grounded=false;}
     s.jumpHeld=m.jump;

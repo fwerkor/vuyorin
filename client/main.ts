@@ -3,7 +3,8 @@ import { GameWorld } from './world';
 import { SPAWN, wrapAngle } from '../shared/world';
 import { PhysicsRuntime, groundHeight } from '../shared/physics';
 import { DEFAULT_APPEARANCE, HEAD_STYLES, BODY_STYLES, PACK_STYLES, safeAppearance, type Appearance } from '../shared/appearance';
-import type { ClientInput, PlayerState, ServerMessage } from '../shared/protocol';
+import type { ClientInput, ServerMessage } from '../shared/protocol';
+import { isMoving, reconcileSelf, shouldSendInput } from '../shared/movement-sync';
 
 const canvas=document.getElementById('world') as HTMLCanvasElement;
 const world=new GameWorld(canvas);
@@ -24,7 +25,7 @@ let physicsLoading:Promise<PhysicsRuntime>|null=null;
 let loggedIn=false, started=false, selfId='', socket:WebSocket|null=null, seq=0;
 let accountId='',appearance:Appearance={...DEFAULT_APPEARANCE};
 let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=groundHeight(x,z)+1.7, vy=0, grounded=true, jumpHeld=false;
-let lastFrame=performance.now(), lastInput=0;
+let lastFrame=performance.now(), lastInput=0, lastSent:ClientInput|null=null, stopSeq=0;
 const held=new Set<string>();
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
 function showToast(text:string){toast.textContent=text;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),3000);}
@@ -66,8 +67,11 @@ function connect(){
   status.textContent='正在连接共享世界';
   connection.addEventListener('open',()=>{
     if(socket!==connection)return;
+    lastSent=null;stopSeq=0;
     connection.send(JSON.stringify({type:'appearance',appearance}));
-    status.textContent='已连接 · 世界在线';status.classList.add('live');showToast('欢迎来到雾曜纪');
+    status.textContent='已连接 · 世界在线';status.classList.add('live');
+    sendInput(performance.now(),true);
+    showToast('欢迎来到雾曜纪');
   });
   connection.addEventListener('message',(evt)=>{
     if(socket!==connection)return;
@@ -80,9 +84,9 @@ function connect(){
       online.textContent=String(msg.online);
       const self=msg.players.find(p=>p.id===selfId);
       if(self){
-        const d=Math.hypot(self.x-x,self.z-z);
-        if(d>7){x=self.x;z=self.z;y=self.y;}
-        else {x+=(self.x-x)*.055;z+=(self.z-z)*.055;y+=(self.y-y)*.07;}
+        const m=input();
+        const next=reconcileSelf({x,y,z},self,isMoving(m),msg.ack>=stopSeq,grounded);
+        ({x,y,z}=next);
       }
       world.syncPlayers(msg.players,selfId);
       physics?.syncRemoteActors(msg.players.filter(p=>p.id!==selfId));
@@ -90,7 +94,7 @@ function connect(){
   });
   connection.addEventListener('close',event=>{
     if(socket!==connection)return;
-    socket=null;selfId='';world.syncPlayers([],selfId);physics?.syncRemoteActors([]);
+    socket=null;lastSent=null;selfId='';world.syncPlayers([],selfId);physics?.syncRemoteActors([]);
     online.textContent='0';status.classList.remove('live');
     if(event.code===4009){
       started=false;held.clear();intro.classList.remove('hidden');hint.classList.remove('visible');
@@ -106,10 +110,20 @@ function connect(){
   connection.addEventListener('error',()=>{if(socket===connection)status.textContent='服务器连接异常';});
 }
 function input():ClientInput {
-  return {type:'input',seq:++seq,
+  return {type:'input',seq,
     forward:Number(held.has('KeyW')||held.has('ArrowUp'))-Number(held.has('KeyS')||held.has('ArrowDown')),
     strafe:Number(held.has('KeyD')||held.has('ArrowRight'))-Number(held.has('KeyA')||held.has('ArrowLeft')),
     yaw, sprint:held.has('ShiftLeft')||held.has('ShiftRight'),jump:held.has('Space')};
+}
+function sendInput(now:number,urgent=false):void {
+  if(socket?.readyState!==WebSocket.OPEN)return;
+  const m=input();
+  if(!shouldSendInput(m,lastSent,now-lastInput,urgent))return;
+  const packet:ClientInput={...m,seq:++seq};
+  socket.send(JSON.stringify(packet));
+  if(!isMoving(packet) && (!lastSent || isMoving(lastSent)))stopSeq=packet.seq;
+  lastSent=packet;
+  lastInput=now;
 }
 async function start(){
   if(!loggedIn)return;
@@ -136,10 +150,14 @@ document.addEventListener('mousemove',(e)=>{if(document.pointerLockElement!==can
 });
 document.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  const added=!held.has(e.code);
   held.add(e.code);
+  if(added)sendInput(performance.now(),true);
 });
-document.addEventListener('keyup',e=>held.delete(e.code));
-window.addEventListener('blur',()=>held.clear());
+document.addEventListener('keyup',e=>{held.delete(e.code);sendInput(performance.now(),true);});
+function releaseAllInputs(){held.clear();sendInput(performance.now(),true);}
+window.addEventListener('blur',releaseAllInputs);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAllInputs();});
 async function checkAuth(){
   try {
     const response=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});
@@ -168,7 +186,7 @@ function frame(t:number){
     cross.classList.toggle('visible',world.hasInteractionTarget(x,y,z));
     heading.textContent=`${['N','NE','E','SE','S','SW','W','NW'][Math.round((((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI))/(Math.PI/4))%8]} ${String(Math.round(((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI)*180/Math.PI)).padStart(3,'0')}°`;
     coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
-    if(socket?.readyState===WebSocket.OPEN && t-lastInput>50){socket.send(JSON.stringify(m));lastInput=t;}
+    sendInput(t);
   } else {
     // Showcase the authored downtown streets while the player is on the title screen.
     const orbit=t*.00010;
