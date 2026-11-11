@@ -9,6 +9,8 @@ import { CHUNK_SIZE, CITY_BASE, SEA_LEVEL, clampWorld, isCity, terrainHeight, wr
 
 export const EYE_HEIGHT=1.7;
 export const PLAYER_RADIUS=.34;
+const CAPSULE_MIDDLE=1.0;
+const CAPSULE_HALF_HEIGHT=.59;
 export interface MotionState { x:number; y:number; z:number; vy:number; grounded:boolean; jumpHeld:boolean; }
 type Collider=import('@dimforge/rapier3d-compat').Collider;
 interface Actor { collider:Collider; }
@@ -22,6 +24,7 @@ export class PhysicsRuntime {
   readonly world:import('@dimforge/rapier3d-compat').World;
   private controller:import('@dimforge/rapier3d-compat').KinematicCharacterController;
   private actors=new Map<string,Actor>();
+  private remoteActorIds=new Set<string>();
   private scenery=new Map<string,Collider[]>();
   private lastScenerySignature='';
   private constructor(){
@@ -112,17 +115,47 @@ export class PhysicsRuntime {
     // Parentless capsule colliders use world-space translations directly.
     // This is supported by Rapier's kinematic controller and avoids stale
     // rigid-body query transforms during high-frequency client prediction.
-    const collider=this.world.createCollider(RAPIER.ColliderDesc.capsule(.55,PLAYER_RADIUS)
-      .setTranslation(state.x,state.y-EYE_HEIGHT+.93,state.z));
+    const collider=this.world.createCollider(RAPIER.ColliderDesc.capsule(CAPSULE_HALF_HEIGHT,PLAYER_RADIUS)
+      .setTranslation(state.x,state.y-EYE_HEIGHT+CAPSULE_MIDDLE,state.z));
     const actor={collider};
     this.actors.set(id,actor);
     return actor;
+  }
+  /** Keep a live remote avatar's solid capsule in the same Rapier query world. */
+  setActorPosition(id:string,s:Pick<MotionState,'x'|'y'|'z'>):void {
+    const collider=this.ensureActor(id,{...s,vy:0,grounded:true,jumpHeld:false}).collider;
+    collider.setTranslation({x:s.x,y:s.y-EYE_HEIGHT+CAPSULE_MIDDLE,z:s.z});
+  }
+  /** The browser predicts against *other* players, never its own local capsule. */
+  syncRemoteActors(players:ReadonlyArray<{id:string;x:number;y:number;z:number}>):void {
+    const seen=new Set<string>();
+    for(const p of players){
+      const id='remote:'+p.id;
+      seen.add(id);
+      this.setActorPosition(id,p);
+    }
+    for(const id of this.remoteActorIds)if(!seen.has(id))this.removeActor(id);
+    this.remoteActorIds=seen;
+    // Rapier's spatial query pipeline must incorporate the moved colliders.
+    this.world.step();
+  }
+  /** Use the same capsule and collider queries for safe, non-overlapping spawns. */
+  canOccupy(x:number,y:number,z:number):boolean {
+    this.world.step();
+    let blocked=false;
+    this.world.intersectionsWithShape(
+      {x,y:y-EYE_HEIGHT+CAPSULE_MIDDLE,z},{x:0,y:0,z:0,w:1},
+      new RAPIER.Capsule(CAPSULE_HALF_HEIGHT,PLAYER_RADIUS+.045),
+      () => {blocked=true;return false;}
+    );
+    return !blocked;
   }
   removeActor(id:string):void {
     const actor=this.actors.get(id);
     if(!actor)return;
     this.world.removeCollider(actor.collider,false);
     this.actors.delete(id);
+    this.remoteActorIds.delete(id);
   }
   /** Kinematic capsule sweep resolves sideways sliding and prevents tunneling. */
   move(id:string,s:MotionState,m:ClientInput,dt:number):void {
@@ -132,7 +165,7 @@ export class PhysicsRuntime {
     const dx=(-Math.sin(yaw)*m.forward+Math.cos(yaw)*m.strafe)*speed*step/mag;
     const dz=(-Math.cos(yaw)*m.forward-Math.sin(yaw)*m.strafe)*speed*step/mag;
     const foot=s.y-EYE_HEIGHT;
-    const origin={x:s.x,y:foot+.93,z:s.z};
+    const origin={x:s.x,y:foot+CAPSULE_MIDDLE,z:s.z};
     actor.collider.setTranslation(origin);
     // Rapier's continuous swept capsule takes precedence over all static obstacle shapes.
     this.controller.computeColliderMovement(actor.collider,{x:dx,y:0,z:dz});
@@ -151,7 +184,7 @@ export class PhysicsRuntime {
     s.y+=s.vy*step;
     const ground=groundHeight(s.x,s.z)+EYE_HEIGHT;
     if(s.y<=ground){s.y=ground;s.vy=0;s.grounded=true;}
-    actor.collider.setTranslation({x:s.x,y:s.y-EYE_HEIGHT+.93,z:s.z});
+    actor.collider.setTranslation({x:s.x,y:s.y-EYE_HEIGHT+CAPSULE_MIDDLE,z:s.z});
   }
   collidersCount():number {
     return this.world.colliders.len();

@@ -1,3 +1,4 @@
+import type { Appearance } from './appearance.js';
 export interface PlayerState {
   id: string;
   name: string;
@@ -5,6 +6,7 @@ export interface PlayerState {
   y: number;
   z: number;
   yaw: number;
+  appearance: Appearance;
 }
 export interface ClientInput {
   type: 'input';
@@ -15,7 +17,7 @@ export interface ClientInput {
   sprint: boolean;
   jump: boolean;
 }
-export type ClientMessage = ClientInput | { type: 'ping'; sent: number };
+export type ClientMessage = ClientInput | { type: 'ping'; sent: number } | { type:'appearance'; appearance:Appearance };
 export type ServerMessage =
   | { type: 'welcome'; id: string; tickRate: number; players: PlayerState[] }
   | { type: 'snapshot'; players: PlayerState[]; ack: number; time: number; online: number }

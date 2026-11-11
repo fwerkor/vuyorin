@@ -7,6 +7,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { clampWorld, hash2, SEA_LEVEL, SPAWN, terrainHeight } from '../shared/world';
 import type { PlayerState } from '../shared/protocol';
+import { safeAppearance } from '../shared/appearance';
+import { createAvatar, disposeAvatar } from './avatar';
 import { WorldStreamer } from './streamer';
 import { PORT_SHAPES } from '../shared/harbor';
 
@@ -33,10 +35,10 @@ function labelSprite(name: string): THREE.Sprite {
   ctx.font = '600 38px sans-serif'; ctx.fillText(name.slice(0, 18), 256, 54, 460);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
-  spr.scale.set(4.7, 1.02, 1); spr.position.y = 3.2; return spr;
+  spr.scale.set(3.5, .78, 1); spr.position.y = 2.47; return spr;
 }
 function rng(i: number): number { return hash2(i * 17.123, i * 79.431); }
-interface Avatar { mesh: THREE.Group; target: THREE.Vector3; yaw: number }
+interface Avatar { mesh: THREE.Group; target: THREE.Vector3; yaw: number; outfitKey:string }
 export class GameWorld {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera: THREE.PerspectiveCamera;
@@ -188,23 +190,24 @@ export class GameWorld {
       if(p.id===selfId)continue;
       seen.add(p.id);
       let avatar=this.avatars.get(p.id);
+      const appearance=safeAppearance(p.appearance);
+      const outfitKey=JSON.stringify(appearance);
+      if(avatar && avatar.outfitKey!==outfitKey){
+        this.scene.remove(avatar.mesh);disposeAvatar(avatar.mesh);this.avatars.delete(p.id);
+        avatar=undefined;
+      }
       if(!avatar){
-        const mesh=new THREE.Group();
-        const coat=new THREE.MeshStandardMaterial({color:'#385565',metalness:.47,roughness:.47});
-        const visor=new THREE.MeshStandardMaterial({color:'#ffc787',metalness:.55,roughness:.18,emissive:'#945828',emissiveIntensity:.6});
-        const body=new THREE.Mesh(new THREE.CapsuleGeometry(.43,.8,4,8),coat);body.position.y=1.15;mesh.add(body);
-        const head=new THREE.Mesh(new THREE.SphereGeometry(.36,12,8),visor);head.position.y=2.08;mesh.add(head);
-        const backpack=new THREE.Mesh(new THREE.BoxGeometry(.7,1.0,.25),coat);backpack.position.set(0,1.25,.37);mesh.add(backpack);
+        const mesh=createAvatar(appearance);
         mesh.add(labelSprite(p.name));
         mesh.position.set(p.x,p.y-1.7,p.z);mesh.rotation.y=p.yaw;
-        this.scene.add(mesh);avatar={mesh,target:new THREE.Vector3(p.x,p.y-1.7,p.z),yaw:p.yaw};this.avatars.set(p.id,avatar);
+        this.scene.add(mesh);avatar={mesh,target:new THREE.Vector3(p.x,p.y-1.7,p.z),yaw:p.yaw,outfitKey};this.avatars.set(p.id,avatar);
       }
       avatar.target.set(p.x,p.y-1.7,p.z);
       avatar.yaw=p.yaw;
     }
     for(const [id,a] of this.avatars) if(!seen.has(id)){
       this.scene.remove(a.mesh);
-      a.mesh.traverse(o=>{if(o instanceof THREE.Sprite){o.material.map?.dispose();o.material.dispose();}else if(o instanceof THREE.Mesh){o.geometry.dispose();(o.material as THREE.Material).dispose();}});
+      disposeAvatar(a.mesh);
       this.avatars.delete(id);
     }
   }
