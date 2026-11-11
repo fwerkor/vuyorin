@@ -1,7 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import type { Server as HTTPServer, IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { clampWorld, SPAWN, terrainHeight } from '../shared/world.js';
+import { clampWorld, SPAWN, terrainHeight, wrapAngle } from '../shared/world.js';
 import type { ClientInput, ClientMessage, PlayerState, ServerMessage } from '../shared/protocol.js';
 import { userFromRequest, type User } from './auth.js';
 
@@ -28,7 +28,7 @@ function integrate(a: Actor, dt: number) {
   const speed = m.sprint ? 9.5 : 5.4;
   const f = magnitude > 1 ? m.forward / magnitude : m.forward;
   const s = magnitude > 1 ? m.strafe / magnitude : m.strafe;
-  const dyaw = ((m.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+  const dyaw = wrapAngle(m.yaw);
   a.state.yaw = dyaw;
   const forwardX = -Math.sin(dyaw), forwardZ = -Math.cos(dyaw);
   a.state.x = clampWorld(a.state.x + (forwardX * f + Math.cos(dyaw) * s) * speed * dt);

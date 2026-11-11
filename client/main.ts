@@ -1,6 +1,6 @@
 import './style.css';
 import { GameWorld } from './world';
-import { SPAWN, clampWorld, terrainHeight } from '../shared/world';
+import { SPAWN, clampWorld, terrainHeight, wrapAngle } from '../shared/world';
 import type { ClientInput, PlayerState, ServerMessage } from '../shared/protocol';
 
 const canvas=document.getElementById('world') as HTMLCanvasElement;
@@ -42,7 +42,7 @@ function connect(){
     }
   });
   socket.addEventListener('close',()=>{
-    socket=null;status.classList.remove('live');status.textContent='连接中断 · 正在重连';
+    socket=null;selfId='';world.syncPlayers([],selfId);online.textContent='0';status.classList.remove('live');status.textContent='连接中断 · 正在重连';
     if(started && loggedIn)setTimeout(connect,2200);
   });
   socket.addEventListener('error',()=>status.textContent='服务器连接异常');
@@ -62,7 +62,7 @@ enter.addEventListener('click',start);
 canvas.addEventListener('click',()=>{if(started&&document.pointerLockElement!==canvas)canvas.requestPointerLock?.();});
 document.addEventListener('pointerlockchange',()=>{if(!started)return;if(document.pointerLockElement!==canvas){hint.textContent='点击画面恢复视角 · ESC 释放鼠标';}else hint.textContent='W A S D 移动 · 鼠标环视 · SHIFT 奔跑 · 空格跳跃';});
 document.addEventListener('mousemove',(e)=>{if(document.pointerLockElement!==canvas)return;
-  yaw-=e.movementX*.0024; pitch=clamp(pitch-e.movementY*.0023,-1.45,1.45);
+  yaw=wrapAngle(yaw-e.movementX*.0024); pitch=clamp(pitch-e.movementY*.0023,-1.45,1.45);
 });
 document.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();

@@ -23,3 +23,9 @@ export function terrainHeight(x: number, z: number): number {
 export function clampWorld(n: number): number {
   return Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, n));
 }
+
+// Normalize any camera rotation to the range [-PI, PI).
+export function wrapAngle(angle: number): number {
+  const turn = Math.PI * 2;
+  return ((angle + Math.PI) % turn + turn) % turn - Math.PI;
+}
