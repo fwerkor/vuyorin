@@ -1,0 +1,29 @@
+{
+  "name": "vuyorin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "VUYORIN browser-native multiplayer exploration",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 0.0.0.0\" \"tsx watch server/index.ts\"",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist-server/server/index.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "jose": "^5.10.0",
+    "three": "^0.180.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.17",
+    "@types/three": "^0.180.0",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2",
+    "vite": "^5.4.20"
+  }
+}

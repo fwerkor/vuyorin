@@ -1,0 +1,21 @@
+[Unit]
+Description=VUYORIN multiplayer game server
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=vuyorin
+WorkingDirectory=/opt/vuyorin
+EnvironmentFile=/etc/vuyorin.env
+ExecStart=/usr/bin/node /opt/vuyorin/dist-server/server/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/vuyorin
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target
