@@ -29,6 +29,7 @@ test('Rapier players occupy solid capsules and local prediction cannot walk thro
     assert.ok(player.z-z >= PLAYER_RADIUS*2-.12,
       'front-facing player must stop before another player collider');
     physics.syncRemoteActors([]);
+    physics.removeActor('local');
     assert.equal(physics.canOccupy(x,y,z),true,'disconnect removes remote collider');
   }finally{
     physics.free();

@@ -32,11 +32,12 @@ function integrate(a: Actor, dt: number, physics: PhysicsRuntime) {
   a.state.yaw=wrapAngle(m.yaw);
   a.vy=motion.vy;a.grounded=motion.grounded;a.jumpHeld=motion.jumpHeld;
 }
-export function attachMultiplayer(server: HTTPServer, physics: PhysicsRuntime): WebSocketServer {
+export function attachMultiplayer(server: HTTPServer, physics: PhysicsRuntime,
+  authenticate: (req:IncomingMessage)=>User|null=userFromRequest): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8192, perMessageDeflate: false });
   const activeByUser=new Map<string,string>();
   server.on('upgrade', (req: IncomingMessage, socket, head) => {
-    const user = userFromRequest(req);
+    const user = authenticate(req);
     const origin = req.headers.origin;
     const expected = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
     const allowed = new Set([new URL(expected).origin, 'http://localhost:5173']);
