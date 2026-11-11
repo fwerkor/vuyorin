@@ -1,7 +1,8 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import type { Server as HTTPServer, IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { clampWorld, SPAWN, terrainHeight, wrapAngle } from '../shared/world.js';
+import { SPAWN, wrapAngle } from '../shared/world.js';
+import { advanceMotion, groundHeight } from '../shared/physics.js';
 import type { ClientInput, ClientMessage, PlayerState, ServerMessage } from '../shared/protocol.js';
 import { userFromRequest, type User } from './auth.js';
 
@@ -24,21 +25,11 @@ const send = (ws: WebSocket, msg: ServerMessage) => {
 };
 function integrate(a: Actor, dt: number) {
   const m = a.input;
-  const magnitude = Math.hypot(m.forward, m.strafe);
-  const speed = m.sprint ? 9.5 : 5.4;
-  const f = magnitude > 1 ? m.forward / magnitude : m.forward;
-  const s = magnitude > 1 ? m.strafe / magnitude : m.strafe;
-  const dyaw = wrapAngle(m.yaw);
-  a.state.yaw = dyaw;
-  const forwardX = -Math.sin(dyaw), forwardZ = -Math.cos(dyaw);
-  a.state.x = clampWorld(a.state.x + (forwardX * f + Math.cos(dyaw) * s) * speed * dt);
-  a.state.z = clampWorld(a.state.z + (forwardZ * f - Math.sin(dyaw) * s) * speed * dt);
-  const groundY = Math.max(terrainHeight(a.state.x, a.state.z), 0) + 1.7;
-  if (m.jump && !a.jumpHeld && a.grounded) { a.vy = 6.4; a.grounded = false; }
-  a.jumpHeld = m.jump;
-  a.vy -= 17.5 * dt;
-  a.state.y += a.vy * dt;
-  if (a.state.y <= groundY) { a.state.y = groundY; a.vy = 0; a.grounded = true; }
+  const motion = { x:a.state.x, y:a.state.y, z:a.state.z, vy:a.vy, grounded:a.grounded, jumpHeld:a.jumpHeld };
+  advanceMotion(motion,m,dt);
+  Object.assign(a.state,{x:motion.x,y:motion.y,z:motion.z});
+  a.state.yaw=wrapAngle(m.yaw);
+  a.vy=motion.vy;a.grounded=motion.grounded;a.jumpHeld=motion.jumpHeld;
 }
 export function attachMultiplayer(server: HTTPServer): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8192, perMessageDeflate: false });
@@ -54,7 +45,7 @@ export function attachMultiplayer(server: HTTPServer): WebSocketServer {
   });
   wss.on('connection', (socket: WebSocket, user: User) => {
     const id = randomUUID();
-    const groundY = Math.max(terrainHeight(SPAWN.x, SPAWN.z), 0) + 1.7;
+    const groundY = groundHeight(SPAWN.x, SPAWN.z) + 1.7;
     const actor: Actor = { socket, user, state: { id, name: user.name, x: SPAWN.x, y: groundY, z: SPAWN.z, yaw: 0 }, input: { ...DEFAULT_INPUT }, lastSeq: 0, vy: 0, grounded: true, jumpHeld: false };
     actors.set(id, actor);
     send(socket, { type: 'welcome', id, tickRate: 1000 / TICK_MS, players: [...actors.values()].map(p => p.state) });

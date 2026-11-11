@@ -7,3 +7,7 @@ dist-server/
 *.log
 .DS_Store
 coverage/
+
+# Immutable compiled world tiles (generate via npm run bake:world)
+client/public/world/v1/*.bin
+client/public/world/v1/manifest.json

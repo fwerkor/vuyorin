@@ -1,6 +1,7 @@
 import './style.css';
 import { GameWorld } from './world';
-import { SPAWN, clampWorld, terrainHeight, wrapAngle } from '../shared/world';
+import { SPAWN, wrapAngle } from '../shared/world';
+import { advanceMotion, groundHeight } from '../shared/physics';
 import type { ClientInput, PlayerState, ServerMessage } from '../shared/protocol';
 
 const canvas=document.getElementById('world') as HTMLCanvasElement;
@@ -16,7 +17,7 @@ const coords=document.getElementById('coords')!;
 const hint=document.getElementById('hint')!;
 const toast=document.getElementById('toast')!;
 let loggedIn=false, started=false, selfId='', socket:WebSocket|null=null, seq=0;
-let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=Math.max(terrainHeight(x,z),0)+1.7, vy=0, grounded=true;
+let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=groundHeight(x,z)+1.7, vy=0, grounded=true, jumpHeld=false;
 let lastFrame=performance.now(), lastInput=0;
 const held=new Set<string>();
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
@@ -87,22 +88,16 @@ function frame(t:number){
   const dt=Math.min(.05,(t-lastFrame)/1000);lastFrame=t;
   if(started){
     const m=input();
-    let f=m.forward,s=m.strafe;
-    const len=Math.hypot(f,s);if(len>1){f/=len;s/=len;}
-    const speed=m.sprint?9.5:5.4;
-    x=clampWorld(x+(-Math.sin(yaw)*f+Math.cos(yaw)*s)*speed*dt);
-    z=clampWorld(z+(-Math.cos(yaw)*f-Math.sin(yaw)*s)*speed*dt);
-    const floor=Math.max(terrainHeight(x,z),0)+1.7;
-    if(m.jump&&grounded){vy=6.4;grounded=false;}
-    vy-=17.5*dt;y+=vy*dt;
-    if(y<=floor){y=floor;grounded=true;vy=0;}
+    const motion={x,y,z,vy,grounded,jumpHeld};
+    advanceMotion(motion,m,dt);
+    ({x,y,z,vy,grounded,jumpHeld}=motion);
     world.setView(x,y,z,yaw,pitch);
     heading.textContent=`${['N','NE','E','SE','S','SW','W','NW'][Math.round((((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI))/(Math.PI/4))%8]} ${String(Math.round(((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI)*180/Math.PI)).padStart(3,'0')}°`;
     coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
     if(socket?.readyState===WebSocket.OPEN && t-lastInput>50){socket.send(JSON.stringify(m));lastInput=t;}
   } else {
     const x0=SPAWN.x+Math.sin(t*.00019)*11,z0=SPAWN.z+Math.cos(t*.00019)*11;
-    const y0=Math.max(terrainHeight(x0,z0),0)+5.6;
+    const y0=groundHeight(x0,z0)+5.6;
     world.setView(x0,y0,z0,-.5+Math.sin(t*.00014)*.3,-.24);
   }
   world.render(dt);

@@ -6,3 +6,7 @@
 4. Register an Auctor OAuth web application `vuyorin-web` with redirect `https://vuyorin.fwerkor.com/auth/callback`.
 5. Add NPM reverse proxy `vuyorin.fwerkor.com` -> `http://vuyorin.incus:3000`; enable websocket support, force SSL, HTTP/2, and use wildcard fwerkor.com certificate.
 6. Verify `/api/health`, OAuth redirect/callback, multiplayer connections and browser render. Never expose the container's port 3000 directly to the Internet.
+
+## World v1 static assets
+
+Before building a release, run `npm run bake:world`. The `dist/world/v1/` directory contains 1,681 binary tiles and a manifest; copy it along with the other Vite output to the application container. Tiles are served by the existing Node web server and cached as immutable assets. The world is not generated when a player connects.

@@ -30,10 +30,10 @@ const server = createServer(async (req, res) => {
     if (filepath !== root && !filepath.startsWith(root + path.sep)) { fail(res, 404); return; }
     let filePath = filepath;
     try { if (!(await stat(filePath)).isFile()) throw new Error('not file'); }
-    catch { if (requested.startsWith('/assets/')) { fail(res, 404); return; } filePath = path.join(root, 'index.html'); }
+    catch { if (requested.startsWith('/assets/') || requested.startsWith('/world/')) { fail(res, 404); return; } filePath = path.join(root, 'index.html'); }
     const content = await readFile(filePath);
     res.writeHead(200, { 'Content-Type': (types[path.extname(filePath)] || 'application/octet-stream') + (['.html','.js','.css','.json'].includes(path.extname(filePath)) ? '; charset=utf-8' : ''),
-      'Cache-Control': filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-store' });
+      'Cache-Control': (filePath.includes('/assets/') || (filePath.includes('/world/v1/') && filePath.endsWith('.bin'))) ? 'public, max-age=31536000, immutable' : 'no-store' });
     if (req.method === 'HEAD') res.end(); else res.end(content);
   } catch (error) { console.error('HTTP error:', error); fail(res, 500); }
 });

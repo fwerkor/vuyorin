@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { clampWorld, hash2, SEA_LEVEL, SPAWN, terrainHeight } from '../shared/world';
 import type { PlayerState } from '../shared/protocol';
+import { WorldStreamer } from './streamer';
 
 const CHUNK = 56;
 const RADIUS = 5;
@@ -42,13 +43,14 @@ export class GameWorld {
   private water: THREE.Mesh;
   private waterTime: { value: number };
   private sky: Sky;
-  private ground = new Map<string, THREE.Group>();
+  private streamer: WorldStreamer;
   private avatars = new Map<string, Avatar>();
   private sun: THREE.DirectionalLight;
   private rain: THREE.Points;
   private rainPositions: Float32Array;
   private elapsed = 0;
   private useBloom = true;
+  stats(){return this.streamer.stats();}
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', alpha: false });
@@ -60,8 +62,9 @@ export class GameWorld {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
+    this.streamer = new WorldStreamer(this.scene);
     this.scene.background = new THREE.Color('#7e9aab');
-    this.scene.fog = new THREE.FogExp2('#7e98a7', .0031);
+    this.scene.fog = new THREE.FogExp2('#7e98a7', .0016);
     this.camera = new THREE.PerspectiveCamera(71, innerWidth / innerHeight, .08, 3800);
     this.camera.position.set(SPAWN.x, terrainHeight(SPAWN.x, SPAWN.z) + 1.7, SPAWN.z);
     this.camera.rotation.order = 'YXZ';
@@ -184,72 +187,6 @@ export class GameWorld {
       const point = new THREE.PointLight('#ffba68',1.6,22);point.position.set(x,12.5,52);world.add(point);
     }
   }
-  private makeChunk(cx:number,cz:number):THREE.Group {
-    const group = new THREE.Group();
-    const steps=19;
-    const vertices=new Float32Array((steps+1)*(steps+1)*3);
-    const colors=new Float32Array(vertices.length);
-    const indices:number[] = [];
-    for(let z=0;z<=steps;z++) for(let x=0;x<=steps;x++){
-      const wx=cx*CHUNK+(x/steps-.5)*CHUNK;
-      const wz=cz*CHUNK+(z/steps-.5)*CHUNK;
-      const h=terrainHeight(wx,wz);
-      const i=(z*(steps+1)+x)*3;
-      vertices[i]=wx;vertices[i+1]=h;vertices[i+2]=wz;
-      const c=fogCol(h).multiplyScalar(.87+hash2(wx, wz)*.19);
-      colors[i]=c.r;colors[i+1]=c.g;colors[i+2]=c.b;
-    }
-    for(let z=0;z<steps;z++) for(let x=0;x<steps;x++){
-      const a=z*(steps+1)+x,b=a+steps+1;
-      indices.push(a,b,a+1,b,b+1,a+1);
-    }
-    const geo=new THREE.BufferGeometry();
-    geo.setAttribute('position',new THREE.BufferAttribute(vertices,3));
-    geo.setAttribute('color',new THREE.BufferAttribute(colors,3));
-    geo.setIndex(indices);geo.computeVertexNormals();
-    const ground = new THREE.Mesh(geo,GROUND_MAT);
-    ground.receiveShadow=true;group.add(ground);
-    const trees:{x:number,y:number,z:number,size:number}[]=[];
-    const count = 13;
-    for(let i=0;i<count;i++){
-      const hx=hash2(cx*107+i*23,cz*301+i*3);
-      const hz=hash2(cx*299+i*19,cz*181+i*13);
-      const x=cx*CHUNK+(hx-.5)*CHUNK,z=cz*CHUNK+(hz-.5)*CHUNK;
-      const y=terrainHeight(x,z);
-      if(y<1.9 || (Math.abs(x-18)<100 && Math.abs(z-44)<85))continue;
-      trees.push({x,y,z,size:.65+hash2(x*.5,z*.5)*.85});
-    }
-    if(trees.length){
-      const pine=new THREE.InstancedMesh(PINE_GEO,PINE_MAT,trees.length);
-      const bark=new THREE.InstancedMesh(BARK_GEO,TRUNK_MAT,trees.length);
-      const dummy=new THREE.Object3D();
-      trees.forEach((t,i)=>{
-        dummy.position.set(t.x,t.y+5.8*t.size,t.z);
-        dummy.scale.setScalar(t.size); dummy.rotation.set(0,hash2(t.x,t.z)*6.28,0);dummy.updateMatrix();pine.setMatrixAt(i,dummy.matrix);
-        dummy.position.set(t.x,t.y+2*t.size,t.z);dummy.scale.setScalar(t.size);dummy.updateMatrix();bark.setMatrixAt(i,dummy.matrix);
-      });
-      pine.castShadow=true; pine.receiveShadow=true;bark.castShadow=true;
-      group.add(pine,bark);
-    }
-    return group;
-  }
-  private updateChunks(x:number,z:number){
-    const cx=Math.round(x/CHUNK),cz=Math.round(z/CHUNK), needed=new Set<string>();
-    for(let iz=-RADIUS;iz<=RADIUS;iz++)for(let ix=-RADIUS;ix<=RADIUS;ix++){
-      if(ix*ix+iz*iz>RADIUS*RADIUS+3)continue;
-      const cX=cx+ix,cZ=cz+iz,key=cX+','+cZ;
-      if(Math.abs(cX*CHUNK)>980 ||Math.abs(cZ*CHUNK)>980)continue;
-      needed.add(key);
-      if(!this.ground.has(key)){const chunk=this.makeChunk(cX,cZ);this.scene.add(chunk);this.ground.set(key,chunk);}
-    }
-    for(const [key,g] of this.ground) if(!needed.has(key)){
-      this.scene.remove(g);
-      g.traverse(o=>{if(o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) {
-        if(o.geometry!==BARK_GEO&&o.geometry!==PINE_GEO&&o.geometry!==cubeShared) o.geometry.dispose();
-      }});
-      this.ground.delete(key);
-    }
-  }
   syncPlayers(players:PlayerState[], selfId:string){
     const seen=new Set<string>();
     for(const p of players) {
@@ -283,7 +220,7 @@ export class GameWorld {
   render(dt:number) {
     this.elapsed+=dt; this.waterTime.value=this.elapsed;
     const x=this.camera.position.x,z=this.camera.position.z;
-    this.updateChunks(x,z);
+    this.streamer.update(x,z,performance.now());
     this.sun.position.set(x-80,130,z-180);
     this.sun.target.position.set(x,0,z);this.sun.target.updateMatrixWorld();
     this.sky.position.set(x,0,z);
@@ -304,4 +241,3 @@ export class GameWorld {
     this.renderer.setSize(innerWidth,innerHeight);this.composer.setSize(innerWidth,innerHeight);
   }
 }
-const cubeShared = new THREE.BoxGeometry(1,1,1);
