@@ -196,7 +196,6 @@ function frame(t:number){
     coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
     sendInput(t);
   } else {
-    avatarPreview?.render(t);
     // Showcase the authored downtown streets while the player is on the title screen.
     const orbit=t*.00010;
     const x0=Math.sin(orbit)*2.8,z0=-23+Math.cos(orbit)*3.5;

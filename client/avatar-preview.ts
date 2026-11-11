@@ -6,13 +6,12 @@ import type { Appearance } from '../shared/appearance';
 export class AvatarPreview {
   private readonly renderer:THREE.WebGLRenderer;
   private readonly scene=new THREE.Scene();
-  private readonly camera=new THREE.PerspectiveCamera(35,500/290,.1,30);
+  private readonly camera=new THREE.PerspectiveCamera(35,350/205,.1,30);
   private avatar:THREE.Group|null=null;
   private key='';
-  private lastFrame=0;
   constructor(canvas:HTMLCanvasElement){
     this.renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'});
-    this.renderer.setSize(500,290,false);
+    this.renderer.setSize(350,205,false);
     this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x000000,0);
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -31,13 +30,9 @@ export class AvatarPreview {
     if(key===this.key)return;
     if(this.avatar){this.scene.remove(this.avatar);disposeAvatar(this.avatar);}
     this.avatar=createAvatar(appearance);
+    this.avatar.rotation.y=.38;
     this.scene.add(this.avatar);
     this.key=key;
-  }
-  render(t:number){
-    if(t-this.lastFrame<60)return;
-    this.lastFrame=t;
-    if(this.avatar)this.avatar.rotation.y=Math.sin(t*.0004)*1.55;
     this.renderer.render(this.scene,this.camera);
   }
   dispose(){
