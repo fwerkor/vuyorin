@@ -15,3 +15,11 @@ client/public/world/v1/manifest.json
 # Reproducible CC0 model assets, pinned by scripts/fetch-city-assets.ts
 client/public/assets/cc0/*.glb
 client/public/assets/cc0/*.tmp
+
+# Reproducible PLATEAU city pilot, fetched with SHA256 verification
+client/public/world/city/*.bin
+client/public/world/city/*.glb
+client/public/world/city/manifest.json
+
+# Fixed architecture texture atlases generated with Pillow at release time
+client/public/assets/architecture/*.png

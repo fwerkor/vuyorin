@@ -1,6 +1,6 @@
 {
   "name": "vuyorin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "VUYORIN browser-native multiplayer exploration",
@@ -9,6 +9,7 @@
     "build": "vite build && tsc -p tsconfig.server.json",
     "bake:world": "tsx scripts/bake-world.ts",
     "assets:fetch": "tsx scripts/fetch-city-assets.ts",
+    "assets:architecture": "python3 scripts/bake-architecture-textures.py",
     "start": "node dist-server/server/index.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"

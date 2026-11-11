@@ -49,7 +49,14 @@ export class WorldStreamer {
     for(const [key,tile] of this.tiles){
       if(this.wanted.has(key))continue;
       this.scene.remove(tile.group);
-      tile.group.traverse(node=>{if(node instanceof THREE.InstancedMesh)node.dispose();});
+      tile.group.traverse(node=>{
+        if(node instanceof THREE.InstancedMesh)node.dispose();
+        if(node instanceof THREE.Mesh && node.userData.ownedGeometry)node.geometry.dispose();
+        if(node instanceof THREE.Mesh && node.userData.ownedMaterial){
+          const mat=node.material as THREE.MeshBasicMaterial;
+          mat.map?.dispose();mat.dispose();
+        }
+      });
       tile.geometry.dispose();
       this.tiles.delete(key);
     }
@@ -77,7 +84,14 @@ export class WorldStreamer {
     group.add(makeCityChunk(result.cx,result.cz,result.lod));
     if(existing){
       this.scene.remove(existing.group);
-      existing.group.traverse(node=>{if(node instanceof THREE.InstancedMesh)node.dispose();});
+      existing.group.traverse(node=>{
+        if(node instanceof THREE.InstancedMesh)node.dispose();
+        if(node instanceof THREE.Mesh && node.userData.ownedGeometry)node.geometry.dispose();
+        if(node instanceof THREE.Mesh && node.userData.ownedMaterial){
+          const mat=node.material as THREE.MeshBasicMaterial;
+          mat.map?.dispose();mat.dispose();
+        }
+      });
       existing.geometry.dispose();
     }
     this.scene.add(group);

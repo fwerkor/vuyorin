@@ -12,6 +12,7 @@ Requirements: Node.js 20+ (Node 18 works for the currently pinned Vite 5 toolcha
 npm ci
 npm run bake:world
 npm run assets:fetch
+npm run assets:architecture
 cp .env.example .env
 # Set PUBLIC_BASE_URL, OIDC_ISSUER, OIDC_CLIENT_ID in .env
 npm run dev
@@ -37,3 +38,7 @@ MIT for original code in this repository. **The external 几猫 HTML and its ass
 The world uses the Rapier WASM kinematic capsule controller on both the browser and authoritative server. The harbor layout, city buildings and street props share their visual and physical shape descriptions, while near-field trees/rocks have streaming physics. The renderer includes SMAA after bloom.
 
 Three authored CC0 urban GLB prefabs are fetched by `npm run assets:fetch` at build time, SHA256 checked and served locally in production. Original author: Quaternius, *Downtown City MegaKit*. The 3D city footprint remains temporary; see `docs/world-streaming.md` for shortlisted licensed full-city maps and the planned collision-safe migration.
+
+### Waterfront signature architecture
+
+An authored 18-landmark waterfront district replaces repetitive rectangular towers near the harbor with skybridges, spiraling arcologies, ring observatories, vertical gardens, transit superstructures and faceted data-vaults. The exact parcels and architectural solids are versioned in `shared/landmarks.ts`. The solid description creates both visible meshes and Rapier colliders; architectural texture maps are deterministically baked offline via `npm run assets:architecture` (Pillow). Landmark meshes are streamed as part of city chunks at three levels of detail. No third-party Cyberpunk 2077 game assets are used.

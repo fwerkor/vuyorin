@@ -3,6 +3,8 @@ import { BUILDINGS, CITY_GRID, buildingsForChunk, type Building } from '../share
 import { CHUNK_SIZE, CITY_BASE, hash2 } from '../shared/world';
 import { attachCityPrefab, cityPrefabVariant } from './city-prefabs';
 import { cityPropsForChunk } from '../shared/city-furniture';
+import { landmarkFor } from '../shared/landmarks';
+import { makeLandmark, makeSkybridges } from './landmark-architecture';
 
 const cube = new THREE.BoxGeometry(1,1,1);
 const surface = (color:string,roughness=.8,metalness=.05,emissive?:string) =>
@@ -154,13 +156,17 @@ export function makeCityChunk(cx:number,cz:number,lod:number):THREE.Group{
   streets(batch,cx,cz,lod);
   for(const b of buildingsForChunk(cx,cz)){
     batch.add('sidewalk',b.x,CITY_BASE+.09,b.z,CITY_GRID-14,.12,CITY_GRID-14);
-    if(!cityPrefabVariant(b,lod))facade(batch,b,lod);
+    if(!landmarkFor(b) && !cityPrefabVariant(b,lod))facade(batch,b,lod);
   }
   if(lod===0)furniture(batch,cx,cz);
   batch.finish(group);
   for(const building of buildingsForChunk(cx,cz)){
-    const variant=cityPrefabVariant(building,lod);
-    if(variant)attachCityPrefab(group,building,variant);
+    if(landmarkFor(building)) group.add(makeLandmark(building,lod));
+    else {
+      const variant=cityPrefabVariant(building,lod);
+      if(variant)attachCityPrefab(group,building,variant);
+    }
   }
+  group.add(makeSkybridges(cx,cz,lod));
   return group;
 }

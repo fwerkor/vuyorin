@@ -4,6 +4,7 @@ import type { ClientInput } from './protocol.js';
 import { BUILDINGS, sceneryForChunk } from './city.js';
 import { PORT_SHAPES } from './harbor.js';
 import { CITY_PROPS } from './city-furniture.js';
+import { landmarkSolids, landmarkFor, CITY_BRIDGES } from './landmarks.js';
 import { CHUNK_SIZE, CITY_BASE, SEA_LEVEL, clampWorld, isCity, terrainHeight, wrapAngle } from './world.js';
 
 export const EYE_HEIGHT=1.7;
@@ -31,7 +32,25 @@ export class PhysicsRuntime {
     this.controller.enableAutostep(.32,.12,false);
     this.controller.enableSnapToGround(.3);
     for(const b of BUILDINGS){
-      this.addBox(b.x,CITY_BASE+b.h/2,b.z,b.w,b.h,b.d);
+      if(landmarkFor(b)){
+        for(const shape of landmarkSolids(b)){
+          if(shape.kind==='box'){
+            const collider=RAPIER.ColliderDesc.cuboid(shape.w/2,shape.h/2,shape.d/2)
+              .setTranslation(shape.x,shape.y,shape.z);
+            if(shape.rotation)collider.setRotation({
+              x:0,y:Math.sin(shape.rotation/2),z:0,w:Math.cos(shape.rotation/2)
+            });
+            this.world.createCollider(collider);
+          }else{
+            this.world.createCollider(
+              RAPIER.ColliderDesc.cylinder(shape.h/2,shape.w/2)
+                .setTranslation(shape.x,shape.y,shape.z));
+          }
+        }
+      } else this.addBox(b.x,CITY_BASE+b.h/2,b.z,b.w,b.h,b.d);
+    }
+    for(const bridge of CITY_BRIDGES){
+      this.addBox(bridge.x,bridge.y,bridge.z,bridge.w,bridge.h,bridge.d);
     }
     for(const p of PORT_SHAPES){
       if(p.solid)this.addBox(p.x,p.y,p.z,p.w,p.h,p.d);

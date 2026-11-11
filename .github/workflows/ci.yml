@@ -23,5 +23,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run bake:world
       - run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install Pillow==10.4.0
+      - run: npm run assets:architecture
       - run: npm run assets:fetch
       - run: npm run build
