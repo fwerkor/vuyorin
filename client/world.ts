@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { clampWorld, hash2, SEA_LEVEL, SPAWN, terrainHeight } from '../shared/world';
 import type { PlayerState } from '../shared/protocol';
+import { remoteBlendFactor } from '../shared/movement-sync';
 import { WorldStreamer } from './streamer';
 import { PORT_SHAPES } from '../shared/harbor';
 
@@ -36,7 +37,7 @@ function labelSprite(name: string): THREE.Sprite {
   spr.scale.set(4.7, 1.02, 1); spr.position.y = 3.2; return spr;
 }
 function rng(i: number): number { return hash2(i * 17.123, i * 79.431); }
-interface Avatar { mesh: THREE.Group; target: THREE.Vector3; yaw: number }
+interface Avatar { mesh: THREE.Group; target: THREE.Vector3; yaw: number; stableSnapshots: number }
 export class GameWorld {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera: THREE.PerspectiveCamera;
@@ -197,8 +198,10 @@ export class GameWorld {
         const backpack=new THREE.Mesh(new THREE.BoxGeometry(.7,1.0,.25),coat);backpack.position.set(0,1.25,.37);mesh.add(backpack);
         mesh.add(labelSprite(p.name));
         mesh.position.set(p.x,p.y-1.7,p.z);mesh.rotation.y=p.yaw;
-        this.scene.add(mesh);avatar={mesh,target:new THREE.Vector3(p.x,p.y-1.7,p.z),yaw:p.yaw};this.avatars.set(p.id,avatar);
+        this.scene.add(mesh);avatar={mesh,target:new THREE.Vector3(p.x,p.y-1.7,p.z),yaw:p.yaw,stableSnapshots:0};this.avatars.set(p.id,avatar);
       }
+      const stable=avatar.target.distanceToSquared(new THREE.Vector3(p.x,p.y-1.7,p.z))<1e-8;
+      avatar.stableSnapshots=stable?avatar.stableSnapshots+1:0;
       avatar.target.set(p.x,p.y-1.7,p.z);
       avatar.yaw=p.yaw;
     }
@@ -225,7 +228,8 @@ export class GameWorld {
     for(let i=1;i<p.length;i+=3) {p[i]-=dt*26; if(p[i]<1) p[i]+=42;}
     (this.rain.geometry.attributes.position as THREE.BufferAttribute).needsUpdate=true;
     for(const a of this.avatars.values()){
-      a.mesh.position.lerp(a.target,Math.min(1,dt*12));
+      a.mesh.position.lerp(a.target,remoteBlendFactor(
+        a.mesh.position.distanceTo(a.target),dt,a.stableSnapshots>0));
       let delta=(a.yaw-a.mesh.rotation.y + Math.PI*3)%(Math.PI*2)-Math.PI;
       a.mesh.rotation.y+=delta*Math.min(1,dt*10);
     }
