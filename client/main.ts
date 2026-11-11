@@ -1,7 +1,9 @@
 import './style.css';
 import { GameWorld } from './world';
+import { AvatarPreview } from './avatar-preview';
 import { SPAWN, wrapAngle } from '../shared/world';
 import { PhysicsRuntime, groundHeight } from '../shared/physics';
+import { DEFAULT_APPEARANCE, HEAD_STYLES, BODY_STYLES, PACK_STYLES, safeAppearance, type Appearance } from '../shared/appearance';
 import type { ClientInput, ServerMessage } from '../shared/protocol';
 import { isMoving, reconcileSelf, shouldSendInput } from '../shared/movement-sync';
 
@@ -18,28 +20,74 @@ const coords=document.getElementById('coords')!;
 const hint=document.getElementById('hint')!;
 const toast=document.getElementById('toast')!;
 const cross=document.getElementById('center-cross')!;
+const wardrobe=document.getElementById('wardrobe')!;
+let avatarPreview:AvatarPreview|null=null;
 let physics:PhysicsRuntime | null=null;
 let physicsLoading:Promise<PhysicsRuntime>|null=null;
 let loggedIn=false, started=false, selfId='', socket:WebSocket|null=null, seq=0;
+let accountId='',appearance:Appearance={...DEFAULT_APPEARANCE};
 let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=groundHeight(x,z)+1.7, vy=0, grounded=true, jumpHeld=false;
 let lastFrame=performance.now(), lastInput=0, lastSent:ClientInput|null=null, stopSeq=0;
 const held=new Set<string>();
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
 function showToast(text:string){toast.textContent=text;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),3000);}
+function renderWardrobe(){
+  if(!avatarPreview){
+    try{avatarPreview=new AvatarPreview(document.getElementById('wardrobeCanvas') as HTMLCanvasElement);
+      wardrobe.querySelector('.wardrobe-preview')!.classList.add('has-webgl');}
+    catch(error){console.warn('Wardrobe preview uses static fallback',error);}
+  }
+  avatarPreview?.setAppearance(appearance);
+  const preview=wardrobe.querySelector('.preview-character') as HTMLElement;
+  for(const [name,color] of Object.entries({head:HEAD_STYLES[appearance.head].color,body:BODY_STYLES[appearance.body].color,pack:PACK_STYLES[appearance.backpack].color,
+    'head-trim':HEAD_STYLES[appearance.head].trim,'body-trim':BODY_STYLES[appearance.body].trim,'pack-trim':PACK_STYLES[appearance.backpack].trim})){
+    preview.style.setProperty('--'+name,color);
+  }
+  const groups=[
+    {part:'head',element:'headOptions',styles:HEAD_STYLES},
+    {part:'body',element:'bodyOptions',styles:BODY_STYLES},
+    {part:'backpack',element:'backpackOptions',styles:PACK_STYLES}
+  ] as const;
+  for(const group of groups){
+    const container=document.getElementById(group.element)!;
+    container.replaceChildren();
+    for(const [key,style] of Object.entries(group.styles)){
+      const option=document.createElement('button');
+      option.type='button';option.className='wardrobe-option';
+      option.setAttribute('aria-pressed',String(appearance[group.part]===key));
+      option.setAttribute('aria-label',`${group.part}: ${style.name}`);
+      const swatch=document.createElement('span');swatch.className='wardrobe-swatch';
+      swatch.style.setProperty('--swatch',style.color);swatch.style.setProperty('--trim',style.trim);
+      option.append(swatch,document.createTextNode(style.name));
+      option.onclick=()=>{
+        appearance=safeAppearance({...appearance,[group.part]:key});
+        try{localStorage.setItem('vuyorin:appearance:'+accountId,JSON.stringify(appearance));}catch{/* Private browsing */}
+        renderWardrobe();
+      };
+      container.append(option);
+    }
+  }
+}
 function connect(){
   if(socket && socket.readyState<=WebSocket.OPEN)return;
   const protocol=location.protocol==='https:'?'wss:':'ws:';
-  socket=new WebSocket(`${protocol}//${location.host}/ws`);
+  const connection=socket=new WebSocket(`${protocol}//${location.host}/ws`);
   status.textContent='正在连接共享世界';
-  socket.addEventListener('open',()=>{
+  connection.addEventListener('open',()=>{
+    if(socket!==connection)return;
     lastSent=null;stopSeq=0;
+    connection.send(JSON.stringify({type:'appearance',appearance}));
     status.textContent='已连接 · 世界在线';status.classList.add('live');
     sendInput(performance.now(),true);
     showToast('欢迎来到雾曜纪');
   });
-  socket.addEventListener('message',(evt)=>{
+  connection.addEventListener('message',(evt)=>{
+    if(socket!==connection)return;
     let msg:ServerMessage;try{msg=JSON.parse(evt.data);}catch{return;}
-    if(msg.type==='welcome'){selfId=msg.id;world.syncPlayers(msg.players,selfId);}
+    if(msg.type==='welcome'){
+      selfId=msg.id;world.syncPlayers(msg.players,selfId);
+      physics?.syncRemoteActors(msg.players.filter(p=>p.id!==selfId));
+    }
     else if(msg.type==='snapshot') {
       online.textContent=String(msg.online);
       const self=msg.players.find(p=>p.id===selfId);
@@ -49,13 +97,25 @@ function connect(){
         ({x,y,z}=next);
       }
       world.syncPlayers(msg.players,selfId);
+      physics?.syncRemoteActors(msg.players.filter(p=>p.id!==selfId));
     }
   });
-  socket.addEventListener('close',()=>{
-    socket=null;lastSent=null;selfId='';world.syncPlayers([],selfId);online.textContent='0';status.classList.remove('live');status.textContent='连接中断 · 正在重连';
+  connection.addEventListener('close',event=>{
+    if(socket!==connection)return;
+    socket=null;lastSent=null;selfId='';world.syncPlayers([],selfId);physics?.syncRemoteActors([]);
+    online.textContent='0';status.classList.remove('live');
+    if(event.code===4009){
+      started=false;held.clear();intro.classList.remove('hidden');hint.classList.remove('visible');
+      introState.textContent='该账号已在另一窗口进入游戏。重新进入将接管另一窗口的角色。';
+      enter.textContent='重新进入世界';
+      if(document.pointerLockElement===canvas)document.exitPointerLock?.();
+      status.textContent='账号在其他窗口进入';
+      return;
+    }
+    status.textContent='连接中断 · 正在重连';
     if(started && loggedIn)setTimeout(connect,2200);
   });
-  socket.addEventListener('error',()=>status.textContent='服务器连接异常');
+  connection.addEventListener('error',()=>{if(socket===connection)status.textContent='服务器连接异常';});
 }
 function input():ClientInput {
   return {type:'input',seq,
@@ -76,6 +136,7 @@ function sendInput(now:number,urgent=false):void {
 async function start(){
   if(!loggedIn)return;
   if(started)return;
+  enter.disabled=true;
   introState.textContent='正在启动共享物理世界...';
   try {
     physics=await (physicsLoading??=PhysicsRuntime.create());
@@ -83,8 +144,9 @@ async function start(){
     physicsLoading=null;
     console.error('Physics init failed',error);
     introState.textContent='物理引擎启动失败，请重试。';
-    showToast('物理引擎初始化失败，请刷新');return;
+    showToast('物理引擎初始化失败，请刷新');enter.disabled=false;return;
   }
+  enter.disabled=false;
   started=true;intro.classList.add('hidden');hint.classList.add('visible');
   connect();canvas.requestPointerLock?.();
 }
@@ -108,7 +170,10 @@ async function checkAuth(){
   try {
     const response=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});
     if(!response.ok)throw new Error('not authenticated');
-    const data=await response.json() as {user:{name:string}};
+    const data=await response.json() as {user:{id:string;name:string}};
+    accountId=data.user.id;
+    try{appearance=safeAppearance(JSON.parse(localStorage.getItem('vuyorin:appearance:'+accountId)||'null'));}catch{appearance={...DEFAULT_APPEARANCE};}
+    wardrobe.hidden=false;renderWardrobe();
     introState.textContent=`欢迎回来，${data.user.name}。世界正在等待你。`;
     loggedIn=true;enter.hidden=false;
   }catch {
