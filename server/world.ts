@@ -2,14 +2,14 @@ import WebSocket, { WebSocketServer } from 'ws';
 import type { Server as HTTPServer, IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { SPAWN, wrapAngle } from '../shared/world.js';
-import { PhysicsRuntime, EYE_HEIGHT, groundHeight } from '../shared/physics.js';
+import { PhysicsRuntime, EYE_HEIGHT, groundHeight, type LiftTravel } from '../shared/physics.js';
 import { DEFAULT_APPEARANCE, validAppearance } from '../shared/appearance.js';
 import type { ClientInput, ClientMessage, PlayerState, ServerMessage } from '../shared/protocol.js';
 import { userFromRequest, type User } from './auth.js';
 
-interface Actor { socket: WebSocket; user: User; state: PlayerState; input: ClientInput; lastSeq: number; vy: number; grounded: boolean; jumpHeld: boolean; }
+interface Actor { socket: WebSocket; user: User; state: PlayerState; input: ClientInput; lastSeq: number; vy: number; grounded: boolean; jumpHeld: boolean; interactHeld:boolean; lift:LiftTravel|null; }
 const actors = new Map<string, Actor>();
-const DEFAULT_INPUT: ClientInput = { type: 'input', seq: 0, forward: 0, strafe: 0, yaw: 0, sprint: false, jump: false };
+const DEFAULT_INPUT: ClientInput = { type: 'input', seq: 0, forward: 0, strafe: 0, yaw: 0, sprint: false, jump: false, interact:false };
 const TICK_MS = 50;
 const MAX_VISIBLE_DISTANCE_SQ = 280 * 280;
 export function validInput(v: unknown): v is ClientInput {
@@ -19,18 +19,20 @@ export function validInput(v: unknown): v is ClientInput {
     typeof m.forward === 'number' && Number.isFinite(m.forward) && Math.abs(m.forward) <= 1 &&
     typeof m.strafe === 'number' && Number.isFinite(m.strafe) && Math.abs(m.strafe) <= 1 &&
     typeof m.yaw === 'number' && Number.isFinite(m.yaw) && Math.abs(m.yaw) <= Math.PI * 4 &&
-    typeof m.sprint === 'boolean' && typeof m.jump === 'boolean';
+    typeof m.sprint === 'boolean' && typeof m.jump === 'boolean' &&
+    (m.interact === undefined || typeof m.interact === 'boolean');
 }
 const send = (ws: WebSocket, msg: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 };
 function integrate(a: Actor, dt: number, physics: PhysicsRuntime) {
   const m = a.input;
-  const motion = { x:a.state.x, y:a.state.y, z:a.state.z, vy:a.vy, grounded:a.grounded, jumpHeld:a.jumpHeld };
+  const motion = { x:a.state.x, y:a.state.y, z:a.state.z, vy:a.vy, grounded:a.grounded, jumpHeld:a.jumpHeld, interactHeld:a.interactHeld, lift:a.lift };
   physics.move(a.state.id,motion,m,dt);
   Object.assign(a.state,{x:motion.x,y:motion.y,z:motion.z});
   a.state.yaw=wrapAngle(m.yaw);
   a.vy=motion.vy;a.grounded=motion.grounded;a.jumpHeld=motion.jumpHeld;
+  a.interactHeld=!!motion.interactHeld;a.lift=motion.lift??null;
 }
 export function attachMultiplayer(server: HTTPServer, physics: PhysicsRuntime,
   authenticate: (req:IncomingMessage)=>User|null=userFromRequest): WebSocketServer {
@@ -66,7 +68,7 @@ export function attachMultiplayer(server: HTTPServer, physics: PhysicsRuntime,
       const cy=groundHeight(cx,cz)+EYE_HEIGHT;
       if(physics.canOccupy(cx,cy,cz)){spawnX=cx;spawnZ=cz;spawnY=cy;break;}
     }
-    const actor: Actor = { socket, user, state: { id, name: user.name, x: spawnX, y: spawnY, z: spawnZ, yaw: 0, appearance:{...DEFAULT_APPEARANCE} }, input: { ...DEFAULT_INPUT }, lastSeq: 0, vy: 0, grounded: true, jumpHeld: false };
+    const actor: Actor = { socket, user, state: { id, name: user.name, x: spawnX, y: spawnY, z: spawnZ, yaw: 0, appearance:{...DEFAULT_APPEARANCE} }, input: { ...DEFAULT_INPUT }, lastSeq: 0, vy: 0, grounded: true, jumpHeld: false, interactHeld:false, lift:null };
     actors.set(id, actor);
     activeByUser.set(user.id,id);
     physics.setActorPosition(id,actor.state);

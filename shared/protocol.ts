@@ -16,6 +16,7 @@ export interface ClientInput {
   yaw: number;
   sprint: boolean;
   jump: boolean;
+  interact?: boolean;
 }
 export type ClientMessage = ClientInput | { type: 'ping'; sent: number } | { type:'appearance'; appearance:Appearance };
 export type ServerMessage =

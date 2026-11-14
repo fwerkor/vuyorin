@@ -54,3 +54,12 @@ test('remote avatars finish interpolation exactly instead of asymptotic jitter',
   assert.ok(remoteBlendFactor(.8,.016,true)>0 && remoteBlendFactor(.8,.016,true)<1);
   assert.equal(remoteBlendFactor(.8,0,false),0);
 });
+
+test('interaction E is forwarded immediately without movement and preserves idle handling', () => {
+  const original={type:'input' as const,seq:3,forward:0,strafe:0,yaw:0,sprint:false,jump:false,interact:false};
+  const pressed={...original,interact:true};
+  assert.equal(shouldSendInput(pressed,original,4,true),true);
+  assert.equal(shouldSendInput(pressed,original,4,false),false);
+  assert.equal(shouldSendInput(pressed,original,51,false),true);
+  assert.equal(shouldSendInput(original,pressed,4,true),true);
+});

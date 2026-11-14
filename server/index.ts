@@ -20,7 +20,7 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', process.env.PUBLIC_BASE_URL || 'http://localhost:3000');
     if (url.pathname === '/api/health') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, service: 'vuyorin', version: '0.3.0' })); return;
+      res.end(JSON.stringify({ ok: true, service: 'vuyorin', version: '0.4.0' })); return;
     }
     if (await handleAuth(req, res, url)) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') { fail(res, 404); return; }

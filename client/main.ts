@@ -2,13 +2,17 @@ import './style.css';
 import { GameWorld } from './world';
 import { AvatarPreview } from './avatar-preview';
 import { SPAWN, wrapAngle } from '../shared/world';
-import { PhysicsRuntime, groundHeight } from '../shared/physics';
+import { PhysicsRuntime, groundHeight, EYE_HEIGHT, type LiftTravel } from '../shared/physics';
+import { HALO_LEVELS, haloLiftNearby, haloNextFloor } from '../shared/halo';
 import { DEFAULT_APPEARANCE, HEAD_STYLES, BODY_STYLES, PACK_STYLES, safeAppearance, type Appearance } from '../shared/appearance';
 import type { ClientInput, ServerMessage } from '../shared/protocol';
 import { isMoving, reconcileSelf, shouldSendInput } from '../shared/movement-sync';
 
 const canvas=document.getElementById('world') as HTMLCanvasElement;
 const world=new GameWorld(canvas);
+const previewParameters=new URLSearchParams(location.search);
+if(previewParameters.has('showcase') && previewParameters.get('clean')==='1')
+  document.body.classList.add('showcase-clean');
 const intro=document.getElementById('intro')!;
 const introState=document.getElementById('introState')!;
 const signin=document.getElementById('signin') as HTMLAnchorElement;
@@ -20,13 +24,16 @@ const coords=document.getElementById('coords')!;
 const hint=document.getElementById('hint')!;
 const toast=document.getElementById('toast')!;
 const cross=document.getElementById('center-cross')!;
+const interactionHint=document.getElementById('interactionHint')!;
+const destination=document.getElementById('destination')!;
 const wardrobe=document.getElementById('wardrobe')!;
 let avatarPreview:AvatarPreview|null=null;
 let physics:PhysicsRuntime | null=null;
 let physicsLoading:Promise<PhysicsRuntime>|null=null;
 let loggedIn=false, started=false, selfId='', socket:WebSocket|null=null, seq=0;
 let accountId='',appearance:Appearance={...DEFAULT_APPEARANCE};
-let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=groundHeight(x,z)+1.7, vy=0, grounded=true, jumpHeld=false;
+let yaw=0, pitch=-.035, x=SPAWN.x, z=SPAWN.z, y=groundHeight(x,z)+1.7, vy=0, grounded=true, jumpHeld=false, interactHeld=false;
+let lift:LiftTravel|null=null;
 let lastFrame=performance.now(), lastInput=0, lastSent:ClientInput|null=null, stopSeq=0;
 const held=new Set<string>();
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
@@ -93,8 +100,10 @@ function connect(){
       const self=msg.players.find(p=>p.id===selfId);
       if(self){
         const m=input();
-        const next=reconcileSelf({x,y,z},self,isMoving(m),msg.ack>=stopSeq,grounded);
-        ({x,y,z}=next);
+        if(!lift){
+          const next=reconcileSelf({x,y,z},self,isMoving(m),msg.ack>=stopSeq,grounded);
+          ({x,y,z}=next);
+        }
       }
       world.syncPlayers(msg.players,selfId);
       physics?.syncRemoteActors(msg.players.filter(p=>p.id!==selfId));
@@ -102,7 +111,7 @@ function connect(){
   });
   connection.addEventListener('close',event=>{
     if(socket!==connection)return;
-    socket=null;lastSent=null;selfId='';world.syncPlayers([],selfId);physics?.syncRemoteActors([]);
+    socket=null;lastSent=null;selfId='';lift=null;world.syncPlayers([],selfId);physics?.syncRemoteActors([]);
     online.textContent='0';status.classList.remove('live');
     if(event.code===4009){
       started=false;held.clear();intro.classList.remove('hidden');hint.classList.remove('visible');
@@ -121,7 +130,7 @@ function input():ClientInput {
   return {type:'input',seq,
     forward:Number(held.has('KeyW')||held.has('ArrowUp'))-Number(held.has('KeyS')||held.has('ArrowDown')),
     strafe:Number(held.has('KeyD')||held.has('ArrowRight'))-Number(held.has('KeyA')||held.has('ArrowLeft')),
-    yaw, sprint:held.has('ShiftLeft')||held.has('ShiftRight'),jump:held.has('Space')};
+    yaw, sprint:held.has('ShiftLeft')||held.has('ShiftRight'),jump:held.has('Space'),interact:held.has('KeyE')};
 }
 function sendInput(now:number,urgent=false):void {
   if(socket?.readyState!==WebSocket.OPEN)return;
@@ -152,7 +161,7 @@ async function start(){
 }
 enter.addEventListener('click',start);
 canvas.addEventListener('click',()=>{if(started&&document.pointerLockElement!==canvas)canvas.requestPointerLock?.();});
-document.addEventListener('pointerlockchange',()=>{if(!started)return;if(document.pointerLockElement!==canvas){hint.textContent='点击画面恢复视角 · ESC 释放鼠标';}else hint.textContent='W A S D 移动 · 鼠标环视 · SHIFT 奔跑 · 空格跳跃';});
+document.addEventListener('pointerlockchange',()=>{if(!started)return;if(document.pointerLockElement!==canvas){hint.textContent='点击画面恢复视角 · ESC 释放鼠标 · E 使用电梯';}else hint.textContent='W A S D 移动 · 鼠标环视 · SHIFT 奔跑 · 空格跳跃 · E 使用电梯';});
 document.addEventListener('mousemove',(e)=>{if(document.pointerLockElement!==canvas)return;
   yaw=wrapAngle(yaw-e.movementX*.0024); pitch=clamp(pitch-e.movementY*.0023,-1.45,1.45);
 });
@@ -186,21 +195,51 @@ function frame(t:number){
   const dt=Math.min(.05,(t-lastFrame)/1000);lastFrame=t;
   if(started){
     const m=input();
-    const motion={x,y,z,vy,grounded,jumpHeld};
+    const motion={x,y,z,vy,grounded,jumpHeld,interactHeld,lift};
     physics!.updateScenery([{x,z}]);
     physics!.move('local',motion,m,dt);
-    ({x,y,z,vy,grounded,jumpHeld}=motion);
+    ({x,y,z,vy,grounded,jumpHeld,interactHeld,lift}=motion);
     world.setView(x,y,z,yaw,pitch);
-    cross.classList.toggle('visible',world.hasInteractionTarget(x,y,z));
+    const foot=y-EYE_HEIGHT;
+    const inLift=haloLiftNearby(x,z,foot);
+    cross.classList.toggle('visible',world.hasInteractionTarget(x,y,z)||inLift);
+    if(lift){
+      const pct=Math.round(100*lift.elapsed/lift.duration);
+      interactionHint.textContent='HALO 空中电梯运行中 · '+pct+'%';
+      interactionHint.classList.add('visible');
+    }else if(inLift){
+      const next=haloNextFloor(foot);
+      interactionHint.textContent='E · HALO EXCHANGE 空中电梯 → '+['一层大厅','二层回廊','云端观景厅'][next];
+      interactionHint.classList.add('visible');
+    }else if(Math.hypot(x-28,z+140)<45){
+      interactionHint.textContent='HALO EXCHANGE · 正门位于南侧（面向港口）';
+      interactionHint.classList.add('visible');
+    }else interactionHint.classList.remove('visible');
     heading.textContent=`${['N','NE','E','SE','S','SW','W','NW'][Math.round((((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI))/(Math.PI/4))%8]} ${String(Math.round(((-yaw%(2*Math.PI))+(2*Math.PI))%(2*Math.PI)*180/Math.PI)).padStart(3,'0')}°`;
-    coords.textContent=`${Math.round(x)} E · ${Math.round(z)} N`;
+    coords.textContent=String(Math.round(x))+' E · '+String(Math.round(z))+' N';
+    const distance=Math.round(Math.hypot(x-28,z+140));
+    destination.textContent=distance>25
+      ?'首座开放建筑 · HALO EXCHANGE · '+distance+' m'
+      :'HALO EXCHANGE · 可进入大厅 / 云端观景厅';
     sendInput(t);
   } else {
-    // Showcase the authored downtown streets while the player is on the title screen.
-    const orbit=t*.00010;
-    const x0=Math.sin(orbit)*2.8,z0=-23+Math.cos(orbit)*3.5;
-    const y0=groundHeight(x0,z0)+6.7;
-    world.setView(x0,y0,z0,Math.sin(orbit*.8)*.10,-.12);
+    // Public art-direction cameras never grant gameplay or server authority.
+    const showcase=previewParameters.get('showcase');
+    if(showcase==='halo-inside'){
+      world.setView(28+Math.sin(t*.00012)*.45,HALO_LEVELS[0]+1.68,-125.8,
+        Math.sin(t*.00012)*.06,-.075);
+    }else if(showcase==='halo-sky'){
+      world.setView(28,HALO_LEVELS[2]+1.68,-143,.32,-.06);
+    }else if(showcase==='halo'){
+      world.setView(28+Math.sin(t*.00008)*1.7,9.4,-107.0,
+        Math.sin(t*.00007)*.06,-.12);
+    }else{
+      const orbit=t*.00010;
+      const x0=Math.sin(orbit)*2.8,z0=-23+Math.cos(orbit)*3.5;
+      const y0=groundHeight(x0,z0)+6.7;
+      world.setView(x0,y0,z0,Math.sin(orbit*.8)*.10,-.12);
+    }
+    interactionHint.classList.remove('visible');
   }
   world.render(dt);
   requestAnimationFrame(frame);

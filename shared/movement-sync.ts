@@ -13,7 +13,8 @@ export function shouldSendInput(
 ): boolean {
   if (!previous) return true;
   const controlsChanged = current.forward !== previous.forward || current.strafe !== previous.strafe ||
-    current.sprint !== previous.sprint || current.jump !== previous.jump;
+    current.sprint !== previous.sprint || current.jump !== previous.jump ||
+    current.interact !== previous.interact;
   if (urgent && controlsChanged) return true;
   if (elapsedMs < 50) return false;
   if (controlsChanged || current.yaw !== previous.yaw) return true;

@@ -59,8 +59,10 @@ test('Rapier colliders mirror ALL port meshes including railings and containers'
   assert.equal(new Set(PORT_SHAPES.map(o=>o.id)).size,PORT_SHAPES.length);
   assert.equal(PORT_SHAPES.filter(s=>/^container-\d+$/.test(s.id) && s.solid).length,8);
   assert.ok(PORT_SHAPES.some(s=>s.id==='quay-guard-south' && s.solid));
+  assert.ok(PORT_SHAPES.some(s=>s.id==='quay-guard-north-left' && s.solid));
+  assert.ok(PORT_SHAPES.some(s=>s.id==='quay-guard-north-right' && s.solid));
   const motion=(x:number,z:number)=>({x,z,y:groundHeight(x,z)+EYE_HEIGHT,vy:0,grounded:true,jumpHeld:false});
-  const input={type:'input' as const,seq:1,forward:0,strafe:1,yaw:0,sprint:true,jump:false};
+  const input={type:'input' as const,seq:1,forward:0,strafe:1,yaw:0,sprint:true,jump:false,interact:false};
   const box=motion(35,40.2);
   physics.updateScenery([box]);
   for(let i=0;i<80;i++)physics.move('box',box,input,.05);
@@ -83,7 +85,7 @@ test('Rapier blocks city buildings and applies hard world boundaries',async()=>{
   const b=BUILDINGS[0];
   const x=b.x+b.w/2+3,z=b.z;
   const state={x,y:groundHeight(x,z)+EYE_HEIGHT,z,vy:0,grounded:true,jumpHeld:false};
-  const m={type:'input' as const,seq:1,forward:0,strafe:-1,yaw:0,sprint:false,jump:false};
+  const m={type:'input' as const,seq:1,forward:0,strafe:-1,yaw:0,sprint:false,jump:false,interact:false};
   physics.updateScenery([state]);
   for(let i=0;i<60;i++)physics.move('building',state,m,.05);
   assert.ok(state.x>b.x+b.w/2+0.3,'player capsule cannot enter building walls');

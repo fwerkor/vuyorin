@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { Building } from '../shared/city';
+import { isHalo } from '../shared/halo';
+import { makeHaloExchange } from './halo-interior';
 import {
   bridgesForChunk, landmarkFor, landmarkSolids,
   type ArchitecturalSolid, type LandmarkSpec
@@ -317,6 +319,7 @@ function finishDetails(group:THREE.Group,b:Building,spec:LandmarkSpec,lod:number
   }
 }
 export function makeLandmark(b:Building,lod:number):THREE.Group{
+  if(isHalo(b))return makeHaloExchange(b,lod);
   const spec=landmarkFor(b);
   if(!spec)throw new Error('Unknown landmark parcel '+b.id);
   const group=new THREE.Group();

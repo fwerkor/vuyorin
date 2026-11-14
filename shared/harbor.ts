@@ -12,7 +12,14 @@ function add(id:string,material:PortMaterial,x:number,y:number,z:number,w:number
 }
 // The walkway is supported by the terrain/ground-height collision; it is not a wall.
 add('quay-floor','walkway',28,3.38,35,86,.28,32,false);
-add('quay-guard-north','steel',27,2.5,18,85,4,.8);
+// City-facing rail has a genuine public egress, aligned with the downtown
+// boulevard. Full-width rails previously trapped new players at the harbor.
+add('quay-guard-north-left','steel',4.25,2.5,18,39.5,4,.8);
+add('quay-guard-north-right','steel',50.75,2.5,18,37.5,4,.8);
+add('city-gate-post-west','steel',23,8.2,18,.55,6.4,.65);
+add('city-gate-post-east','steel',33,8.2,18,.55,6.4,.65);
+add('city-gate-beam','steel',28,11.7,18,11,.60,.65);
+add('city-gate-glow','gold',28,11.25,18,9.8,.12,.17,false);
 add('quay-guard-south','steel',27,2.5,52,85,4,.8);
 add('warehouse','dark',-14,7.2,17,18,7,14);
 add('warehouse-roof','orange',-14,11.2,17,17,1.4,14);

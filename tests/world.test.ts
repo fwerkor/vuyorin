@@ -14,8 +14,13 @@ test('world bounds and smoothstep', () => {
   assert.equal(smoothstep(0,10,-2), 0); assert.equal(smoothstep(0,10,15), 1);
 });
 test('input validation rejects forged position, bad axes and NaN', () => {
-  const good = { type:'input', seq:1, forward:1, strafe:0, yaw:0, sprint:false, jump:false };
+  const good = { type:'input', seq:1, forward:1, strafe:0, yaw:0, sprint:false, jump:false, interact:false };
   assert.ok(validInput(good));
+  // An old 0.3.x tab may still be open during rolling deployment.
+  // It must remain able to move, but cannot trigger new interactions.
+  const {interact:_ignored,...legacy}=good;
+  assert.ok(validInput(legacy));
+  assert.equal(validInput({...good,interact:'E'}),false);
   assert.equal(validInput({...good,forward:2}), false);
   assert.equal(validInput({...good,yaw:NaN}), false);
   assert.equal(validInput({...good,seq:-1}), false);
@@ -27,6 +32,6 @@ test('camera yaw stays in the server-accepted interval after many turns', () => 
     const angle = wrapAngle(turns * 2 * Math.PI + .42);
     assert.ok(angle >= -Math.PI && angle < Math.PI);
     assert.ok(Math.abs(angle - .42) < 1e-10);
-    assert.ok(validInput({type:'input',seq:1,forward:0,strafe:0,yaw:angle,sprint:false,jump:false}));
+    assert.ok(validInput({type:'input',seq:1,forward:0,strafe:0,yaw:angle,sprint:false,jump:false,interact:false}));
   }
 });

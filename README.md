@@ -42,3 +42,24 @@ Three authored CC0 urban GLB prefabs are fetched by `npm run assets:fetch` at bu
 ### Waterfront signature architecture
 
 An authored 18-landmark waterfront district replaces repetitive rectangular towers near the harbor with skybridges, spiraling arcologies, ring observatories, vertical gardens, transit superstructures and faceted data-vaults. The exact parcels and architectural solids are versioned in `shared/landmarks.ts`. The solid description creates both visible meshes and Rapier colliders; architectural texture maps are deterministically baked offline via `npm run assets:architecture` (Pillow). Landmark meshes are streamed as part of city chunks at three levels of detail. No third-party Cyberpunk 2077 game assets are used.
+
+### First furnished destination: HALO EXCHANGE
+
+HALO EXCHANGE (city parcel `0:-3`) is the first fully walkable, original
+building in the open-world prototype. Reach it from the public harbor gate by
+walking north through the downtown streets; the entrance faces south (toward
+the harbor). The public lobby contains reception, cafe, a holographic exhibit
+and seating, the elevated mezzanine contains garden and study furniture, and
+the rooftop sky lounge contains window seating, plants and a panoramic view.
+
+The elevator is located inside the right-hand portion of the lobby. Press
+**E** while in the lift to travel to the next level; movement is server
+authorized and visible as a smooth transition, not a client-only teleport.
+The architectural shapes, all solid furniture, floor supports, server
+colliders and client colliders are defined in `shared/halo.ts`.
+
+Textures are generated offline and can be rebuilt with
+`npm run assets:halo` (Python 3 + Pillow); this is included in CI. The
+scene is still a stylized playable environment, not a photogrammetric
+building. Other high-rise buildings remain exterior-only while individually
+authored interiors are developed.

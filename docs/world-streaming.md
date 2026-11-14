@@ -70,3 +70,21 @@ They must be imported together with their road/height and collision meshes befor
 The port arrival district has 18 manually selected, named landmark parcels. Their architectural forms include cantilevers, split arcologies with internal connector spans, garden terraces, a spiraling illuminated tower, glass observatory rings and a multi-level transit terminal. Every structural mass is fixed in `shared/landmarks.ts` and used by the Rapier server as well as the Three.js client, with airborne bridges stored as dedicated physical pieces. Far LODs keep silhouettes while avoiding expensive details.
 
 Façade textures are **offline baked** by `scripts/bake-architecture-textures.py`: deterministic window arrays, dim/lit room masks, weathered concrete, oxidized metal and titanium panels. Execute `npm run assets:architecture` before building (Python 3 and Pillow 10.4). These maps do not affect the physical world and may be upgraded independently. All names, designs, geometry, and texture atlases are original VUYORIN assets; no CP2077 texture, model or trademark is embedded.
+
+## One-building-at-a-time interior design
+
+The first complete destination is `HALO EXCHANGE` near (28, -140).
+The building replaces its formerly solid podium collision with a physical
+entrance, glass shell, atrium, mezzanine, upper gallery, walkable surfaces,
+reception, cafe, furniture and interior signage. The server and browser both
+instantiate the static collision objects from `shared/halo.ts`. The lift is
+a deterministic, server-controlled transition between three levels activated
+by E; old clients without the optional `interact` input continue to move
+without accessing the lift. Textures are offline authored using
+`scripts/bake-interior-textures.py`.
+
+Unfinished neighboring buildings intentionally stay inaccessible until
+their particular interiors have been reviewed. The HALO interior retains a
+low-detail skyline silhouette for far chunks, while its furnished geometry
+loads only in nearby tiles. Unit and integration tests exercise entry, wall
+blocking, atrium voids, lift motion, furniture collision and harbor egress.

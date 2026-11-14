@@ -5,13 +5,18 @@ import { BUILDINGS, sceneryForChunk } from './city.js';
 import { PORT_SHAPES } from './harbor.js';
 import { CITY_PROPS } from './city-furniture.js';
 import { landmarkSolids, landmarkFor, CITY_BRIDGES } from './landmarks.js';
+import { haloInterior, haloSupportHeight, HALO_LEVELS, haloLiftNearby, haloNextFloor, haloFloorIndex, HALO_LIFT, isHalo } from './halo.js';
 import { CHUNK_SIZE, CITY_BASE, SEA_LEVEL, clampWorld, isCity, terrainHeight, wrapAngle } from './world.js';
 
 export const EYE_HEIGHT=1.7;
 export const PLAYER_RADIUS=.34;
 const CAPSULE_MIDDLE=1.0;
 const CAPSULE_HALF_HEIGHT=.59;
-export interface MotionState { x:number; y:number; z:number; vy:number; grounded:boolean; jumpHeld:boolean; }
+export interface LiftTravel { from:number; to:number; elapsed:number; duration:number }
+export interface MotionState {
+  x:number; y:number; z:number; vy:number; grounded:boolean;
+  jumpHeld:boolean; interactHeld?:boolean; lift?:LiftTravel|null;
+}
 type Collider=import('@dimforge/rapier3d-compat').Collider;
 interface Actor { collider:Collider; }
 const physicsGravity=17.5;
@@ -35,7 +40,21 @@ export class PhysicsRuntime {
     this.controller.enableAutostep(.32,.12,false);
     this.controller.enableSnapToGround(.3);
     for(const b of BUILDINGS){
-      if(landmarkFor(b)){
+      if(isHalo(b)){
+        for(const part of haloInterior(b)){
+          if(!part.solid)continue;
+          const shape=part.kind==='cylinder'
+            ?RAPIER.ColliderDesc.cylinder(part.h/2,part.w/2)
+            :part.kind==='sphere'
+              ?RAPIER.ColliderDesc.ball(part.w/2)
+              :RAPIER.ColliderDesc.cuboid(part.w/2,part.h/2,part.d/2);
+          shape.setTranslation(part.x,part.y,part.z);
+          if(part.yaw)shape.setRotation({
+            x:0,y:Math.sin(part.yaw/2),z:0,w:Math.cos(part.yaw/2)
+          });
+          this.world.createCollider(shape);
+        }
+      } else if(landmarkFor(b)){
         for(const shape of landmarkSolids(b)){
           if(shape.kind==='box'){
             const collider=RAPIER.ColliderDesc.cuboid(shape.w/2,shape.h/2,shape.d/2)
@@ -157,37 +176,66 @@ export class PhysicsRuntime {
     this.actors.delete(id);
     this.remoteActorIds.delete(id);
   }
-  /** Kinematic capsule sweep resolves sideways sliding and prevents tunneling. */
+  /** Continuous horizontal sweeps, shared authored indoor levels, and lift travel. */
   move(id:string,s:MotionState,m:ClientInput,dt:number):void {
     const actor=this.ensureActor(id,s);
+    const step=Math.min(Math.max(dt,0),.05);
+    if(s.lift){
+      // Deterministic travel on server/client; movement is locked inside cab.
+      const lift=s.lift;
+      lift.elapsed=Math.min(lift.elapsed+step,lift.duration);
+      const t=lift.elapsed/lift.duration;
+      const ease=t*t*(3-2*t);
+      s.x=HALO_LIFT.x;s.z=HALO_LIFT.z;
+      s.y=lift.from+(lift.to-lift.from)*ease+EYE_HEIGHT;
+      s.vy=0;s.grounded=t>=1;
+      s.interactHeld=!!m.interact;s.jumpHeld=m.jump;
+      if(t>=1)s.lift=null;
+      actor.collider.setTranslation({x:s.x,y:s.y-EYE_HEIGHT+CAPSULE_MIDDLE,z:s.z});
+      return;
+    }
     const yaw=wrapAngle(m.yaw),mag=Math.max(1,Math.hypot(m.forward,m.strafe));
-    const speed=m.sprint?9.5:5.4,step=Math.min(dt,.05);
+    const speed=m.sprint?9.5:5.4;
     const dx=(-Math.sin(yaw)*m.forward+Math.cos(yaw)*m.strafe)*speed*step/mag;
     const dz=(-Math.cos(yaw)*m.forward-Math.sin(yaw)*m.strafe)*speed*step/mag;
     const foot=s.y-EYE_HEIGHT;
-    const origin={x:s.x,y:foot+CAPSULE_MIDDLE,z:s.z};
-    actor.collider.setTranslation(origin);
-    // Do not run a zero-length Rapier sweep: penetration recovery can introduce
-    // tiny horizontal displacements even after every movement key was released.
-    if (m.forward !== 0 || m.strafe !== 0) {
-      // Rapier's continuous swept capsule takes precedence over static obstacles.
+    actor.collider.setTranslation({x:s.x,y:foot+CAPSULE_MIDDLE,z:s.z});
+    // A zero input must not cause Rapier's penetration recovery to drift
+    // the character after keyup. Preserve upstream idle-movement fix.
+    if(m.forward!==0 || m.strafe!==0){
       this.controller.computeColliderMovement(actor.collider,{x:dx,y:0,z:dz});
       const sweep=this.controller.computedMovement();
       const tx=clampWorld(s.x+sweep.x),tz=clampWorld(s.z+sweep.z);
-      // Terrain height is pre-baked, shared by the server and client.
       const prev=groundHeight(s.x,s.z),next=groundHeight(tx,tz);
-      const grade=next-prev;
-      const horizontal=Math.hypot(sweep.x,sweep.z);
+      const grade=next-prev,horizontal=Math.hypot(sweep.x,sweep.z);
       if(!s.grounded || grade<=.17+horizontal*.95){
         s.x=tx;s.z=tz;
       }
     }
+    // The shared world, never untrusted player coordinates, authorizes lift
+    // activation. Only an edge-triggered key press near the lift is accepted.
+    if(m.interact && !s.interactHeld && haloLiftNearby(s.x,s.z,foot) && s.grounded){
+      const from=HALO_LEVELS[haloFloorIndex(foot)];
+      const to=HALO_LEVELS[haloNextFloor(foot)];
+      s.lift={from,to,elapsed:0,duration:Math.max(1.5,Math.abs(to-from)/4.5)};
+      s.x=HALO_LIFT.x;s.z=HALO_LIFT.z;
+      s.y=from+EYE_HEIGHT;s.vy=0;s.grounded=false;
+      s.interactHeld=true;s.jumpHeld=m.jump;
+      actor.collider.setTranslation({x:s.x,y:s.y-EYE_HEIGHT+CAPSULE_MIDDLE,z:s.z});
+      return;
+    }
+    s.interactHeld=!!m.interact;
     if(m.jump&&!s.jumpHeld&&s.grounded){s.vy=6.4;s.grounded=false;}
     s.jumpHeld=m.jump;
+    const previousFeet=s.y-EYE_HEIGHT;
+    const authored=haloSupportHeight(s.x,s.z,previousFeet);
+    const floor=Math.max(groundHeight(s.x,s.z),authored??-Infinity);
+    if(s.grounded&&previousFeet>floor+.32)s.grounded=false;
     s.vy-=physicsGravity*step;
     s.y+=s.vy*step;
-    const ground=groundHeight(s.x,s.z)+EYE_HEIGHT;
-    if(s.y<=ground){s.y=ground;s.vy=0;s.grounded=true;}
+    if(s.y<=floor+EYE_HEIGHT){
+      s.y=floor+EYE_HEIGHT;s.vy=0;s.grounded=true;
+    }
     actor.collider.setTranslation({x:s.x,y:s.y-EYE_HEIGHT+CAPSULE_MIDDLE,z:s.z});
   }
   collidersCount():number {

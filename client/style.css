@@ -47,3 +47,29 @@
 .wardrobe-preview canvas{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none}
 .wardrobe-preview.has-webgl canvas{display:block}
 .wardrobe-preview.has-webgl .preview-character{display:none}
+
+#interactionHint {
+  position:fixed;bottom:14%;left:50%;transform:translate(-50%,9px);
+  color:#e8fafa;background:rgba(4,19,28,.85);border:1px solid #58d6e5;
+  border-radius:6px;padding:9px 17px;font:500 13px/1.5 system-ui,sans-serif;
+  box-shadow:0 0 24px rgba(33,205,231,.18);letter-spacing:.07em;
+  pointer-events:none;opacity:0;transition:opacity .2s ease,transform .2s ease;
+  z-index:12;white-space:nowrap;
+}
+#interactionHint.visible{opacity:1;transform:translate(-50%,0)}
+
+/* Screenshot-only art-director camera: no auth/gameplay privileges. */
+.showcase-clean #intro,
+.showcase-clean #status,
+.showcase-clean #compass,
+.showcase-clean #coords,
+.showcase-clean #online,
+.showcase-clean header,
+.showcase-clean #interactionHint {display:none!important}
+
+#destination{position:absolute;right:36px;bottom:88px;text-align:right;
+ color:#8be2ed;font:500 12px/1.7 system-ui,sans-serif;
+ letter-spacing:.06em;text-shadow:0 0 9px #051018}
+#destination:before{content:'◈ ';color:#f0c47e}
+.showcase-clean #destination{display:none}
+@media(max-width:740px){#destination{right:15px;bottom:65px;font-size:11px}}

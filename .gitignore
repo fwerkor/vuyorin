@@ -23,3 +23,6 @@ client/public/world/city/manifest.json
 
 # Fixed architecture texture atlases generated with Pillow at release time
 client/public/assets/architecture/*.png
+
+# Baked interior texture atlases for HALO EXCHANGE
+client/public/assets/halo/*.png

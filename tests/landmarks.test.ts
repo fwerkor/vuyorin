@@ -4,6 +4,7 @@ import { BUILDINGS } from '../shared/city.js';
 import { CITY_BASE } from '../shared/world.js';
 import { LANDMARKS, CITY_BRIDGES, landmarkFor, landmarkSolids, bridgesForChunk } from '../shared/landmarks.js';
 import { PhysicsRuntime, EYE_HEIGHT, groundHeight } from '../shared/physics.js';
+import { isHalo } from '../shared/halo.js';
 
 test('every landmark is a distinct named and authored parcel with multiple physical masses',()=>{
   assert.equal(LANDMARKS.length,18);
@@ -14,6 +15,7 @@ test('every landmark is a distinct named and authored parcel with multiple physi
     const b=BUILDINGS.find(building=>building.id===spec.id);
     assert.ok(b,'missing parcel '+spec.id);
     assert.equal(landmarkFor(b),spec);
+    if(isHalo(b)){assert.deepEqual(landmarkSolids(b),[]);continue;}
     const solids=landmarkSolids(b);
     assert.ok(solids.length>=2,spec.name+' has multiple masses');
     for(const s of solids){
@@ -37,13 +39,13 @@ test('elevated skybridges are uniquely indexed to streaming tiles',()=>{
 });
 test('Rapier blocks an authored podium and retains walkable surrounding streets',async()=>{
   const runtime=await PhysicsRuntime.create();
-  const b=BUILDINGS.find(b=>b.id==='0:-3')!;
+  const b=BUILDINGS.find(b=>b.id==='0:-5')!;
   const origin={x:b.x+b.w*.465+2,z:b.z,
     y:groundHeight(b.x+b.w*.465+2,b.z)+EYE_HEIGHT,
     vy:0,grounded:true,jumpHeld:false};
   runtime.updateScenery([origin]);
   const before=origin.x;
-  const input={type:'input' as const,seq:1,forward:0,strafe:-1,yaw:0,sprint:true,jump:false};
+  const input={type:'input' as const,seq:1,forward:0,strafe:-1,yaw:0,sprint:true,jump:false,interact:false};
   for(let i=0;i<40;i++)runtime.move('landmark',origin,input,.05);
   assert.ok(origin.x<before-1,'can approach podium');
   assert.ok(origin.x>b.x+b.w*.465+.25,'cannot phase into authored structure');

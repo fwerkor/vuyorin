@@ -7,6 +7,7 @@
  */
 import { CITY_BASE, CHUNK_SIZE } from './world.js';
 import type { Building } from './city.js';
+import { isHalo } from './halo.js';
 
 export type LandmarkForm =
   | 'helix' | 'arcology' | 'suspended' | 'portal' | 'garden'
@@ -50,7 +51,7 @@ export interface ArchitecturalSolid {
 }
 export function landmarkSolids(b:Building):ArchitecturalSolid[] {
   const spec=landmarkFor(b);
-  if(!spec)return [];
+  if(!spec || isHalo(b))return [];
   const out:ArchitecturalSolid[]=[];
   const w=b.w,d=b.d,h=b.h,x=b.x,z=b.z,base=CITY_BASE;
   function box(xf:number,zf:number,wf:number,df:number,y0:number,height:number,
